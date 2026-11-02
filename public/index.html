@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="description" content="Live train seat status and confirmation chance for every train in your time window.">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>AbhiRail</title>
+<link rel="icon" href="data:image/png;base64,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">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..800&family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Single dark cinema theme: black stage, one red signal colour, bold condensed display type. Layout: brand bar, red-glow hero with search, summary strip, dense sortable board */
+  --bg:#0a0a0a;
+  --surface:#141414;
+  --raise:#1d1d1d;
+  --ink:#f5f5f1;
+  --muted:#a3a3a3;
+  --line:#2a2a2a;
+  --accent:#e50914;
+  --accent-hi:#ff1f2c;
+  --accent-ink:#ffffff;
+  --accent-soft:rgba(229,9,20,.16);
+  --ok:#46d369; --ok-soft:rgba(70,211,105,.14);
+  --good:#b8e05a; --good-soft:rgba(184,224,90,.13);
+  --warn:#f5b041; --warn-soft:rgba(245,176,65,.14);
+  --bad:#ff5a5f; --bad-soft:rgba(255,90,95,.14);
+  --chip:#262626;
+  --font-logo:"Bebas Neue", "Archivo", Impact, sans-serif;
+  --font-display:"Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body:"IBM Plex Sans", "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r:8px;
+  color-scheme: dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+body{background:radial-gradient(1100px 520px at 18% -8%, rgba(229,9,20,.28), transparent 62%),radial-gradient(900px 420px at 100% 0%, rgba(229,9,20,.10), transparent 60%),var(--bg);background-repeat:no-repeat}
+.wrap{max-width:1200px;margin:0 auto;padding:18px 20px 64px;display:flex;flex-direction:column;gap:20px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:4px 0 6px}
+.logo{display:inline-flex;align-items:center;gap:12px;text-decoration:none}
+.logo .mark{height:42px;width:auto;filter:drop-shadow(0 0 14px rgba(229,9,20,.35))}
+.logo .wordmark{height:26px;width:auto}
+.hero{display:flex;flex-direction:column;gap:8px;padding:26px 0 4px}
+.hero h1{font-family:var(--font-display);font-stretch:118%;font-weight:800;font-size:clamp(30px,4.6vw,52px);line-height:1.02;letter-spacing:-.015em;margin:0;text-wrap:balance;max-width:16ch}
+.hero p{margin:0;color:var(--muted);max-width:60ch;font-size:16px}
+.conn{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 12px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.dot.on{background:var(--ok)} .dot.off{background:var(--bad)} .dot.wait{background:var(--warn)}
+
+form.search{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:grid;grid-template-columns:1.2fr auto 1.2fr 1fr 2fr 1fr;gap:12px;align-items:end}
+.timepair input{padding:10px 8px}
+.field{display:flex;flex-direction:column;gap:6px;position:relative;min-width:0}
+.field label,.lbl{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em;text-transform:uppercase}
+input,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:10px 11px;min-width:0;width:100%}
+input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.timepair{display:flex;gap:6px;align-items:center}
+.timepair span{color:var(--muted);font-size:13px}
+.swap{align-self:end;height:42px;width:42px;border-radius:9px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer;font-size:16px}
+.swap:hover{border-color:var(--accent)}
+.row2{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:12px;align-items:end;justify-content:space-between}
+.row2 .opts{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+.row2 .field{width:170px}
+.check{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink);padding:10px 0;cursor:pointer}
+.check input{width:16px;height:16px;accent-color:var(--accent)}
+.btn{font:inherit;font-weight:600;border-radius:9px;padding:11px 18px;border:1px solid transparent;cursor:pointer}
+.btn.primary{background:var(--accent);color:var(--accent-ink);min-width:150px}
+.btn.primary:disabled{opacity:.6;cursor:progress}
+.btn.ghost{background:transparent;border-color:var(--line);color:var(--ink)}
+.btn.ghost:hover{border-color:var(--accent)}
+.btn.small{padding:6px 10px;font-size:13px}
+
+.sugg{position:absolute;top:100%;left:0;right:0;margin-top:4px;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.12);z-index:20;overflow:hidden}
+.sugg button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;background:none;border:0;padding:9px 12px;font:inherit;color:var(--ink);cursor:pointer}
+.sugg button:hover,.sugg button.act{background:var(--accent-soft)}
+.sugg small{color:var(--muted);font-size:12px}
+
+.notice{border-radius:var(--r);padding:12px 14px;border:1px solid var(--line);background:var(--surface);display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.notice.warn{background:var(--warn-soft);border-color:transparent}
+.notice.bad{background:var(--bad-soft);border-color:transparent}
+.notice.info{background:var(--accent-soft);border-color:transparent}
+.notice p{margin:0;max-width:80ch}
+.notice strong{font-weight:600}
+
+.progress{display:flex;align-items:center;gap:12px;font-size:14px;color:var(--muted)}
+.bar{flex:1;height:6px;border-radius:99px;background:var(--line);overflow:hidden;max-width:360px}
+.bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s}
+
+.summary{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:12px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.tile .k{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.02em}
+.tile .v{font-family:var(--font-display);font-stretch:108%;font-weight:700;font-size:24px;font-variant-numeric:tabular-nums}
+.tile .s{font-size:13px;color:var(--muted)}
+.tile.best{border-color:var(--accent);box-shadow:inset 4px 0 0 var(--accent)}
+.tile.best .v{font-size:19px;line-height:1.25}
+
+.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.seg{display:inline-flex;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{font:inherit;font-size:13px;font-weight:500;background:none;border:0;border-radius:7px;padding:7px 11px;color:var(--muted);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.toolbar .meta{font-size:13px;color:var(--muted)}
+
+.tablewrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.02em;text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+th button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-transform:inherit;letter-spacing:inherit}
+th button[data-active="true"]{color:var(--accent)}
+td{padding:12px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+tr.dim td{opacity:.62}
+.tn{font-family:var(--font-mono);font-weight:600;font-size:13px}
+.tname{font-weight:600}
+.sub{font-size:12px;color:var(--muted)}
+.time{font-family:var(--font-mono);font-size:15px;font-weight:600}
+.plus{font-family:var(--font-mono);font-size:11px;color:var(--accent);margin-left:3px;vertical-align:super}
+.cls{display:inline-block;font-family:var(--font-mono);font-weight:600;font-size:12px;background:var(--chip);border-radius:6px;padding:3px 7px}
+.pill{display:inline-block;font-size:12px;font-weight:600;border-radius:999px;padding:3px 9px;white-space:nowrap}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.good{background:var(--good-soft);color:var(--good)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.bad{background:var(--bad-soft);color:var(--bad)}
+.pill.na{background:var(--chip);color:var(--muted)}
+.raw{font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-top:4px;display:block}
+.chance{display:flex;flex-direction:column;gap:5px;min-width:96px}
+.chance b{font-family:var(--font-mono);font-size:15px}
+.chance .track{height:5px;border-radius:99px;background:var(--line);overflow:hidden}
+.chance .track i{display:block;height:100%}
+.est{font-size:11px;color:var(--muted)}
+.fare{font-family:var(--font-mono);font-weight:600}
+.tier{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.stars{display:inline-flex;gap:1px}
+.stars button{background:none;border:0;padding:0 1px;font-size:15px;line-height:1;cursor:pointer;color:var(--line)}
+.stars button.on{color:var(--warn)}
+.links{display:flex;flex-direction:column;gap:4px;white-space:nowrap}
+.links a{color:var(--accent);font-size:13px;font-weight:600;text-decoration:none}
+.links a:hover{text-decoration:underline}
+.alt{margin-top:8px;font-size:12px;background:var(--ok-soft);color:var(--ok);border-radius:8px;padding:6px 8px;max-width:340px}
+.alt.w{background:var(--warn-soft);color:var(--warn)}
+.newtag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;background:var(--accent);color:var(--accent-ink);border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:1px}
+.empty{padding:28px;text-align:center;color:var(--muted)}
+
+section.conns{display:flex;flex-direction:column;gap:10px}
+section.conns h2,.legend h2{font-family:var(--font-display);font-stretch:108%;font-size:18px;margin:6px 0 0}
+.conncard{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;display:grid;grid-template-columns:1fr 1fr auto;gap:16px;align-items:center}
+.leg{display:flex;flex-direction:column;gap:3px;min-width:0}
+.via{font-size:13px;color:var(--muted)}
+.legend{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.legend h2{grid-column:1/-1;margin:0}
+.legend div{font-size:13px;color:var(--muted)}
+.legend b{color:var(--ink);font-weight:600;display:block;margin-bottom:3px}
+
+form.search{background:rgba(20,20,20,.88);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-color:#262626;box-shadow:0 18px 60px rgba(0,0,0,.55)}
+input,select{background:#0e0e0e;border-color:#2e2e2e}
+input::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.7}
+.btn.primary{box-shadow:0 6px 24px rgba(229,9,20,.35);letter-spacing:.01em}
+.btn.primary:hover{background:var(--accent-hi)}
+.tile{background:var(--surface);border-color:#232323}
+.tile.best{border-color:var(--accent);box-shadow:inset 4px 0 0 var(--accent),0 14px 44px rgba(229,9,20,.18)}
+.tablewrap,.legend,.conncard{border-color:#232323}
+tbody tr{transition:background-color .15s}
+tbody tr:hover td{background:var(--raise)}
+th{background:#111;position:sticky;top:0}
+.sugg{background:var(--raise);border-color:#333;box-shadow:0 14px 40px rgba(0,0,0,.6)}
+.conn{background:rgba(20,20,20,.8);border-color:#2a2a2a}
+.seg{background:var(--surface);border-color:#262626}
+.toolbar{align-items:flex-end}
+.tgroup{display:flex;flex-direction:column;gap:6px;min-width:0;max-width:100%}
+.tlabel{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.seg button{font-size:14px;padding:8px 13px}
+.meta{font-size:13px;color:var(--muted);margin-top:-8px}
+.board{display:flex;flex-direction:column;gap:10px}
+.tcard{background:var(--surface);border:1px solid #232323;border-radius:10px;padding:16px 18px;display:grid;grid-template-columns:180px minmax(170px,250px) 1fr;grid-template-areas:"time train classes" "time foot classes" "notes notes notes";gap:8px 20px;align-items:start;transition:border-color .15s,background-color .15s}
+.tcard:hover{border-color:#3a3a3a;background:#171717}
+.tcard.dim{opacity:.55}
+.tc-time{grid-area:time;display:flex;flex-direction:column;gap:4px}
+.tt{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.time.big{font-size:22px;font-weight:600;letter-spacing:-.01em}
+.arrow{color:var(--muted);font-size:15px}
+.tc-train{grid-area:train;display:flex;flex-direction:column;gap:3px;min-width:0}
+.tname{font-size:16px;font-weight:600;line-height:1.3}
+.tierchip{font-size:11px;font-weight:600;color:var(--ink);background:var(--chip);border-radius:4px;padding:2px 6px}
+.tier{gap:8px;margin-top:2px}
+.tc-classes{grid-area:classes;display:grid;grid-template-columns:repeat(auto-fill,minmax(124px,150px));gap:8px;min-width:0}
+.ct{background:#101010;border:1px solid #262626;border-radius:8px;padding:9px 10px 10px;display:flex;flex-direction:column;gap:5px;min-width:0}
+.ct.wide{grid-column:1/-1}
+.ct.best{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.ct-h{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.besttag{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent)}
+.ct-p{font-family:var(--font-mono);font-size:22px;font-weight:600;line-height:1}
+.ct.k-ok .ct-p{color:var(--ok)} .ct.k-good .ct-p{color:var(--good)} .ct.k-warn .ct-p{color:var(--warn)} .ct.k-bad .ct-p{color:var(--bad)} .ct.k-na .ct-p{color:var(--muted)}
+.ct .track{height:4px;border-radius:99px;background:#2a2a2a;overflow:hidden}
+.ct .track i{display:block;height:100%}
+.ct-s{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ct-s .est{font-size:11px}
+.ct-f{font-family:var(--font-mono);font-size:14px;font-weight:600;color:var(--ink)}
+.tc-notes{grid-area:notes;display:flex;flex-wrap:wrap;gap:6px}
+.note{font-size:12px;border-radius:6px;padding:5px 8px}
+.note.w{background:var(--warn-soft);color:var(--warn)} .note.ok{background:var(--ok-soft);color:var(--ok)}
+.tc-foot{grid-area:foot;display:flex;flex-direction:column;align-items:flex-start;gap:6px;align-self:end}
+.tc-foot .links{flex-direction:row;gap:16px}
+.empty{background:var(--surface);border:1px solid #232323;border-radius:10px}
+@media (max-width: 980px){
+  .tcard{grid-template-columns:170px 1fr;grid-template-areas:"time train" "classes classes" "notes notes" "foot foot"}
+  .tc-foot{flex-direction:row;justify-content:space-between;align-items:center;width:100%;border-top:1px solid #222;padding-top:10px}
+  .tc-classes{grid-template-columns:repeat(auto-fill,minmax(118px,1fr))}
+}
+@media (max-width: 760px){
+  .wrap{padding:12px 14px 48px;gap:16px}
+  .hero{padding:14px 0 0}
+  .hero h1{font-size:30px}
+  .hero p{font-size:15px}
+  .logo .mark{height:34px} .logo .wordmark{height:21px}
+  .conn{font-size:12px;padding:5px 10px}
+  form.search{grid-template-columns:1fr 1fr;grid-template-areas:"from from" "to to" "date cls" "time time" "row row";gap:12px;padding:14px}
+  .f-from{grid-area:from} .f-to{grid-area:to} .f-date{grid-area:date} .f-class{grid-area:cls} .f-time{grid-area:time} .row2{grid-area:row}
+  #from,#to{padding-right:52px}
+  .swap{grid-area:from;justify-self:end;align-self:end;width:38px;height:38px;margin:0 3px 2px 0;transform:rotate(90deg);background:var(--raise);z-index:2}
+  .row2 .opts{width:100%;display:grid;grid-template-columns:1fr;gap:6px}
+  .row2 .field{width:100%}
+  input,select{font-size:16px}
+  .summary{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .tile{padding:10px 11px}
+  .tile .k{font-size:10px}
+  .tile:not(.best) .s{display:none}
+  .tile .v{font-size:20px}
+  .tile.best .v{font-size:17px}
+  .toolbar{flex-direction:column;align-items:stretch;gap:10px}
+  .seg{flex-wrap:nowrap;overflow-x:auto;width:100%;scrollbar-width:none}
+  .seg::-webkit-scrollbar{display:none}
+  .seg button{flex:0 0 auto}
+  .meta{margin-top:-4px}
+  .tcard{grid-template-columns:1fr;grid-template-areas:"time" "train" "classes" "notes" "foot";padding:14px;gap:10px}
+  .tc-train{flex-direction:row;flex-wrap:wrap;align-items:baseline;gap:4px 8px}
+  .tc-train .tier{width:100%}
+  .time.big{font-size:21px}
+  .tc-classes{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  .tc-foot{flex-direction:row;justify-content:space-between;align-items:center;width:100%;border-top:1px solid #222;padding-top:10px}
+  .ct{padding:8px 8px 9px}
+  .ct-p{font-size:19px}
+  .ct-s{font-size:12px}
+  .ct-f{font-size:13px}
+  .tc-foot .links{gap:14px}
+  .legend{grid-template-columns:1fr}
+}
+@media (max-width: 360px){ .tc-classes{grid-template-columns:repeat(2,minmax(0,1fr))} }
+@media (max-width: 980px){
+  form.search{grid-template-columns:1fr auto 1fr}
+  form.search .f-date,form.search .f-time,form.search .f-class{grid-column:span 1}
+  .summary{grid-template-columns:1fr 1fr}
+  .tile.best{grid-column:1/-1}
+  .legend{grid-template-columns:1fr}
+}
+@media (max-width: 760px){
+  .row2 .field{width:100%}
+  .btn.primary{width:100%}
+  table thead{display:none}
+  table,tbody,tr,td{display:block;width:100%}
+  tr{border-bottom:1px solid var(--line);padding:12px 14px;display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
+  td{border:0;padding:0}
+  td.c-train{grid-column:1/-1}
+  td.c-links{grid-column:1/-1}
+  .links{flex-direction:row;gap:14px}
+  .conncard{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion: reduce){ .bar i{transition:none} }
+@media (max-width: 760px){ .summary{grid-template-columns:repeat(3,minmax(0,1fr))} .tile.best{grid-column:1/-1} }
+.debug{background:#050505;border:1px dashed #333;border-radius:8px;padding:12px;font:11px/1.4 var(--font-mono);color:#9a9a9a;white-space:pre-wrap;max-height:480px;overflow:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="topbar">
+    <a class="logo" href="#" aria-label="AbhiRail home"><img class="mark" src="/logo-mark.png" alt="" width="400" height="339"><img class="wordmark" src="/logo-word.png" alt="AbhiRail" width="700" height="144"></a>
+    <div class="conn" id="conn" aria-live="polite"><span class="dot wait" id="connDot"></span><span id="connText">Connecting…</span></div>
+  </nav>
+  <header class="hero">
+    <h1>Find the berth that will confirm.</h1>
+    <p>Every train in your time window, with live seats, fares and the chance a waitlisted ticket clears.</p>
+  </header>
+
+  <form class="search" id="form" autocomplete="off" novalidate>
+    <div class="field f-from">
+      <label for="from">From</label>
+      <input id="from" placeholder="City or station code" value="Kanpur">
+      <div class="sugg" id="fromSugg" hidden></div>
+    </div>
+    <button type="button" class="swap" id="swap" aria-label="Swap from and to">⇄</button>
+    <div class="field f-to">
+      <label for="to">To</label>
+      <input id="to" placeholder="City or station code" value="Delhi">
+      <div class="sugg" id="toSugg" hidden></div>
+    </div>
+    <div class="field f-date">
+      <label for="date">Date</label>
+      <input id="date" type="date" value="2026-11-16">
+    </div>
+    <div class="field f-time">
+      <span class="lbl" id="timeLbl">Departs between</span>
+      <div class="timepair" role="group" aria-labelledby="timeLbl">
+        <input id="tStart" type="time" value="00:00" aria-label="Earliest departure">
+        <span>to</span>
+        <input id="tEnd" type="time" value="08:00" aria-label="Latest departure">
+      </div>
+    </div>
+    <div class="field f-class">
+      <label for="cls">Class</label>
+      <select id="cls">
+        <option value="AC" selected>All AC</option>
+        <option value="3A">AC 3 Tier (3A)</option>
+        <option value="2A">AC 2 Tier (2A)</option>
+        <option value="1A">First AC (1A)</option>
+        <option value="3E">AC 3 Economy (3E)</option>
+        <option value="CC">AC Chair Car (CC)</option>
+        <option value="EC">Executive Chair (EC)</option>
+        <option value="SL">Sleeper (SL)</option>
+        <option value="ANY">Any class</option>
+      </select>
+    </div>
+    <div class="row2">
+      <div class="opts">
+        <div class="field">
+          <label for="quota">Quota</label>
+          <select id="quota">
+            <option value="GN" selected>General</option>
+            <option value="TQ">Tatkal</option>
+            <option value="PT">Premium Tatkal</option>
+            <option value="SS">Senior citizen</option>
+            <option value="LD">Ladies</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn primary" id="go" type="submit">Search live seats</button>
+    </div>
+  </form>
+
+  <div id="notices"></div>
+  <div class="progress" id="progress" hidden><span id="progText">Finding trains…</span><div class="bar"><i id="progBar"></i></div></div>
+
+  <div class="summary" id="summary"></div>
+
+  <div class="toolbar">
+    <div class="tgroup">
+      <span class="tlabel">Sort</span>
+      <div class="seg" role="group" aria-label="Sort results" id="sortSeg">
+        <button type="button" data-sort="chance" aria-pressed="true">Best chance</button>
+        <button type="button" data-sort="price" aria-pressed="false">Cheapest</button>
+        <button type="button" data-sort="dep" aria-pressed="false">Earliest</button>
+        <button type="button" data-sort="dur" aria-pressed="false">Fastest</button>
+        <button type="button" data-sort="quality" aria-pressed="false">Best train</button>
+      </div>
+    </div>
+    <div class="tgroup">
+      <span class="tlabel">Show</span>
+      <div class="seg" role="group" aria-label="Filter results" id="showSeg">
+        <button type="button" data-show="all" aria-pressed="true">All</button>
+        <button type="button" data-show="confirmed" aria-pressed="false">Confirmed</button>
+        <button type="button" data-show="good" aria-pressed="false">60%+</button>
+      </div>
+    </div>
+  </div>
+  <div class="meta" id="meta"></div>
+
+  <div class="board" id="rows" aria-live="polite"></div>
+  <div id="moreWrap"></div>
+
+
+  <div class="legend">
+    <h2>How to read the chance</h2>
+    <div><b>Available = 100%</b>A confirmed berth is open right now. Seats sell fast, so book soon. RAC means you can board and share a berth until one frees up.</div>
+    <div><b>Waitlist = estimate</b>The chance is a rule of thumb from the waitlist number: the lower the number, the higher the chance. It is not a measured prediction. Tatkal waitlists are marked down because they clear less often.</div>
+    <div><b>New trains</b>Trains launched in the last few weeks, such as the Vande Bharat Sleeper, may not be in the live data yet. They appear with a "New" tag and a link to check seats on IRCTC.</div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+const AC = ["1A","2A","3A","3E","CC","EC"];
+const ALLC = ["1A","2A","3A","3E","CC","EC","SL","2S"];
+const SEAT_CHECK_CAP = 24;
+const IRCTC = "https://www.irctc.co.in/nget/train-search";
+
+/* Trains launched recently that the live timetable may not carry yet. Times are the published schedule. */
+const NEW_TRAINS = [
+  {no:"27421", name:"Varanasi–New Delhi Vande Bharat Sleeper", type:"VB_SLEEPER", classes:["3A","2A","1A"],
+   runNote:"Runs 6 days a week. Sources differ on the day off (Friday or Saturday), so confirm on IRCTC.",
+   stops:[["BSB","Varanasi Jn",1,"20:50"],["PRYJ","Prayagraj Jn",1,"22:35"],["CNB","Kanpur Central",2,"00:40"],["ALJN","Aligarh Jn",2,"03:55"],["GZB","Ghaziabad",2,"05:23"],["NDLS","New Delhi",2,"06:10"]]},
+  {no:"27422", name:"New Delhi–Varanasi Vande Bharat Sleeper", type:"VB_SLEEPER", classes:["3A","2A","1A"],
+   runNote:"Runs 6 days a week. Sources differ on the day off, so confirm on IRCTC.",
+   stops:[["NDLS","New Delhi",1,"21:40"],["GZB","Ghaziabad",1,"22:13"],["ALJN","Aligarh Jn",1,"23:20"],["CNB","Kanpur Central",2,"02:45"],["PRYJ","Prayagraj Jn",2,"05:05"],["BSB","Varanasi Jn",2,"07:10"]]},
+  {no:"27651", name:"Mumbai–Bengaluru Vande Bharat Sleeper", type:"VB_SLEEPER", classes:["3A","2A","1A"],
+   runNote:"Does not run on Tuesdays (per published timetable). Only end stations are listed here.",
+   offDay:1, stops:[["CSMT","Mumbai CSMT",1,"20:10"],["SMVB","SMVT Bengaluru",2,"12:00"]]},
+  {no:"27652", name:"Bengaluru–Mumbai Vande Bharat Sleeper", type:"VB_SLEEPER", classes:["3A","2A","1A"],
+   runNote:"Does not run on Mondays (per published timetable). Only end stations are listed here.",
+   offDay:0, stops:[["SMVB","SMVT Bengaluru",1,"19:45"],["CSMT","Mumbai CSMT",2,"11:55"]]},
+  {no:"27575", name:"Howrah–Kamakhya Vande Bharat Sleeper", type:"VB_SLEEPER", classes:["3A","2A","1A"],
+   runNote:"Does not run on Thursdays (per published timetable). Only end stations are listed here.",
+   offDay:3, stops:[["HWH","Howrah Jn",1,"18:20"],["KYQ","Kamakhya Jn",2,"08:20"]]},
+  {no:"27576", name:"Kamakhya–Howrah Vande Bharat Sleeper", type:"VB_SLEEPER", classes:["3A","2A","1A"],
+   runNote:"Does not run on Wednesdays (per published timetable). Only end stations are listed here.",
+   offDay:2, stops:[["KYQ","Kamakhya Jn",1,"18:15"],["HWH","Howrah Jn",2,"08:15"]]}
+];
+
+/* Example results so the page opens in a real working state. Checked 3 Nov 2026, 01:15 IST, Kanpur → Delhi, 16 Nov. */
+const EXAMPLE = {
+  checkedAt: Date.UTC(2026,10,2,19,45),
+  label:"Kanpur → Delhi · Mon 16 Nov · 00:00–08:00 · All AC",
+  trains:[
+    ["12381","POORVA EXPRESS","SUPERFAST","CNB","NDLS","00.07",358,[["3A","RLWL51/WL34",795],["2A","REGRET",1100],["1A","REGRET",1830]]],
+    ["12417","PRAYAGRAJ EXP","SUPERFAST","CNB","NDLS","00.30",390,[["3A","RLWL26/WL18",795],["2A","RLWL14/WL11",1100],["1A","REGRET",1830]]],
+    ["12309","RJPB TEJAS RAJ","RAJDHANI","CNB","NDLS","02.20",320,[["3A","RLWL7/WL7",965],["2A","RLWL4/WL2",1320],["1A","RLWL1/WL1",2210]]],
+    ["12393","S KRANTI SUP EX","SUPERFAST","CNB","NDLS","02.30",325,[["3E","REGRET",735],["3A","REGRET",795],["2A","RLWL4/WL4",1100],["1A","RLWL1/WL1",1830]]],
+    ["12559","SHIV GANGA EXP","SUPERFAST","CNB","NDLS","02.50",340,[["3E","RLWL15/WL15",735],["3A","RLWL24/WL17",795],["2A","RLWL4/WL4",1100],["1A","RLWL1/WL1",1830]]],
+    ["20801","MAGADH EXP","SUPERFAST","CNB","NDLS","04.05",475,[["3E","RLWL13/WL8",735],["3A","RLWL92/WL9",795],["2A","RLWL16/WL12",1124],["1A","RLWL6/WL4",1848]]],
+    ["22811","TEJAS RAJ EXP","RAJDHANI","CNB","NDLS","04.40",315,[["3A","AVAILABLE-0025",1415],["2A","RLWL1/WL1",1905],["1A","RLWL1/WL1",2527]]],
+    ["12305","RAJDHANI EXPRES","RAJDHANI","CNB","NDLS","04.50",315,[["3A","RLWL2/WL2",1360],["2A","RLWL1/WL1",1561],["1A","RLWL1/WL1",2532]]],
+    ["12423","RAJDHANI EXP","RAJDHANI","CNB","NDLS","05.00",330,[["3A","RLWL23/WL15",1360],["2A","AVAILABLE-0001",1825],["1A","RLWL5/WL3",2250]]],
+    ["12313","RAJDHANI EXPRES","RAJDHANI","CNB","NDLS","05.20",330,[["3A","RLWL2/WL2",1360],["2A","RLWL1/WL1",1825],["1A","AVAILABLE-0001",2250]]],
+    ["12259","BKN DURONTO EXP","RAJDHANI","CNB","NDLS","05.30",330,[["3A","RLWL6/WL6",1360],["2A","RLWL6/WL1",1825],["1A","RLWL1/WL1",2250]]],
+    ["12453","RNC NDLS RAJ EX","RAJDHANI","CNB","NDLS","05.40",330,[["3A","AVAILABLE-0008",1360],["2A","RLWL2/WL2",1715],["1A","AVAILABLE-0003",2250]]],
+    ["12033","SHATABDI EXP","SHATABDI","CNB","NDLS","06.00",320,[["CC","AVAILABLE-0147",1115],["EC","AVAILABLE-0025",1715]]],
+    ["04097","DBG SSB SPL","MAIL_EXPRESS","CNB","NDLS","06.55",585,[["3A","AVAILABLE-0004",1070]]],
+    ["82501","IRCTC TEJAS EXP","MAIL_EXPRESS","CNB","NDLS","07.25",315,[["CC","AVAILABLE-0207",1749],["EC","GNWL1/WL1",1323]]],
+    ["12419","GOMTI EXPRESS","SUPERFAST","CNB","NDLS","07.36",444,[["CC","RLWL14/WL13",655],["2A","RLWL2/WL2",1100],["1A","RLWL1/WL1",1830]]]
+  ]
+};
+
+/* ---------- state ---------- */
+const state = {
+  apiReady:false, keySet:false, debug:location.hash==="#debug", debugLog:[],
+  from:null, to:null,
+  rows:[], conns:[], sort:"chance", show:"all",
+  pending:[], ctx:null, searching:false, example:true,
+  ratings: loadRatings()
+};
+const $ = id => document.getElementById(id);
+
+/* ---------- helpers ---------- */
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function parseHM(t){ if(t==null) return null; const m=String(t).match(/(\d{1,2})[.:](\d{2})/); return m? (+m[1])*60+(+m[2]) : null; }
+function fmtHM(min){ min=((min%1440)+1440)%1440; return String(Math.floor(min/60)).padStart(2,"0")+":"+String(min%60).padStart(2,"0"); }
+function fmtDur(m){ if(m==null) return "—"; const h=Math.floor(m/60), r=m%60; return h+"h "+String(r).padStart(2,"0")+"m"; }
+function fmtINR(n){ return n==null? "—" : "₹"+Math.round(n).toLocaleString("en-IN"); }
+function ago(ts){ if(!ts) return ""; const s=Math.max(0,Math.round((Date.now()-ts)/1000)); if(s<60) return "just now"; const m=Math.round(s/60); if(m<60) return m+" min ago"; const h=Math.round(m/60); if(h<48) return h+" h ago"; return Math.round(h/24)+" days ago"; }
+function dateObj(iso){ const [y,m,d]=iso.split("-").map(Number); return new Date(Date.UTC(y,m-1,d)); }
+function addDays(iso,n){ const d=dateObj(iso); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); }
+function weekdayMon0(iso){ return (dateObj(iso).getUTCDay()+6)%7; }
+function fmtDate(iso){ const d=dateObj(iso); return d.toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short",timeZone:"UTC"}); }
+function inWindow(min,s,e){ if(min==null) return true; return s<=e ? (min>=s && min<=e) : (min>=s || min<=e); }
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function loadRatings(){ try{ return JSON.parse(localStorage.getItem("tsf-ratings")||"{}")||{}; }catch(e){ return {}; } }
+function saveRatings(){ try{ localStorage.setItem("tsf-ratings",JSON.stringify(state.ratings)); }catch(e){} }
+async function pool(items,n,fn){ let i=0; const workers=Array.from({length:Math.min(n,items.length)},async()=>{ while(i<items.length){ const k=i++; await fn(items[k],k); } }); await Promise.all(workers); }
+
+/* ---------- seat status → chance ---------- */
+function wlPct(n){
+  if(n<=2) return 78; if(n<=5) return 75; if(n<=10) return 70; if(n<=15) return 65; if(n<=20) return 60;
+  if(n<=30) return 50; if(n<=50) return 40; if(n<=75) return 28; if(n<=100) return 20; if(n<=150) return 12; return 6;
+}
+function readStatus(raw){
+  const s=String(raw||"").toUpperCase().trim();
+  if(!s) return {kind:"na",pct:null,label:"No data"};
+  if(/^(AVAILABLE|AVL|CURR_AVBL)/.test(s)){ const m=s.match(/(\d+)/); return {kind:"ok",pct:100,label: m? ("Available · "+(+m[1])+" left") : "Available"}; }
+  if(/REGRET|NOT ?AVAILABLE|TRAIN ?CANCEL|DEPARTED|CHART ?PREPARED|NOT ?BOOKABLE/.test(s)) return {kind:"bad",pct:0,label: /REGRET/.test(s)?"Full (regret)":"Not bookable"};
+  if(/RAC/.test(s)){ const m=s.match(/RAC\s*(\d+)/); return {kind:"good",pct:90,label:"RAC"+(m?" "+(+m[1]):"")+" · can travel",est:true}; }
+  const nums=[...s.matchAll(/(?:[A-Z]*WL)\s*(\d+)/g)].map(x=>+x[1]);
+  if(nums.length){ const n=Math.min(...nums); let p=wlPct(n); if(/TQWL|PTWL/.test(s)) p=Math.round(p*0.5); return {kind: p>=60?"good":(p>=35?"warn":"bad"), pct:p, label:"Waitlist "+n, est:true, wl:n}; }
+  return {kind:"na",pct:null,label:raw};
+}
+function chanceColor(p){ if(p==null) return "var(--line)"; if(p>=95) return "var(--ok)"; if(p>=60) return "var(--good)"; if(p>=35) return "var(--warn)"; return "var(--bad)"; }
+
+/* ---------- train quality ---------- */
+function tierOf(name,type,no){
+  const n=String(name||"").toUpperCase(), t=String(type||"").toUpperCase();
+  if(t==="VB_SLEEPER" || (/^27\d{3}$/.test(no) && /VANDE/.test(n))) return [5,"Vande Bharat Sleeper"];
+  if(/VANDE/.test(n)) return [5,"Vande Bharat"];
+  if(/TEJAS/.test(n)) return [4.8,"Tejas"];
+  if(/DURONTO/.test(n)) return [4.5,"Duronto"];
+  if(t==="RAJDHANI" || /RAJDHANI|\bRAJ\b/.test(n)) return [4.6,"Rajdhani"];
+  if(/JANSHATABDI|JAN SHATABDI/.test(n)) return [3.5,"Jan Shatabdi"];
+  if(t==="SHATABDI" || /SHATABDI/.test(n)) return [4.4,"Shatabdi"];
+  if(/HUMSAFAR|HAMSAFAR/.test(n)) return [4,"Humsafar"];
+  if(/GARIB|GARIBRATH/.test(n)) return [3,"Garib Rath"];
+  if(/\bAC\b/.test(n)) return [3.8,"AC Express"];
+  if(/SPL|SPECIAL/.test(n)) return [2.6,"Special"];
+  if(t==="SUPERFAST") return [3.4,"Superfast"];
+  return [3,"Mail/Express"];
+}
+
+/* ---------- API ---------- */
+const CITIES = [
+  {name:"Delhi", codes:["NDLS","NZM","DLI","ANVT"]},
+  {name:"Mumbai", codes:["CSMT","LTT","MMCT","BDTS","DR"]},
+  {name:"Kolkata", codes:["HWH","SDAH","KOAA"]},
+  {name:"Chennai", codes:["MAS","MS"]},
+  {name:"Bengaluru", codes:["SBC","SMVB","YPR"]},
+  {name:"Hyderabad", codes:["SC","HYB","KCG"]},
+  {name:"Lucknow", codes:["LKO","LJN"]},
+  {name:"Kanpur", codes:["CNB"]},
+  {name:"Prayagraj", codes:["PRYJ","PCOI"]},
+  {name:"Varanasi", codes:["BSB","BSBS"]},
+  {name:"Patna", codes:["PNBE","PPTA","RJPB"]},
+  {name:"Jaipur", codes:["JP"]},
+  {name:"Ahmedabad", codes:["ADI"]},
+  {name:"Pune", codes:["PUNE"]},
+  {name:"Bhopal", codes:["BPL","RKMP"]},
+  {name:"Agra", codes:["AGC","AF"]},
+  {name:"Gorakhpur", codes:["GKP"]},
+  {name:"Jhansi", codes:["VGLJ"]},
+  {name:"Guwahati", codes:["GHY","KYQ"]}
+];
+const MAX_PAIRS = 9;
+
+function apiError(status, body){
+  const code = (body && body.code) || ({401:"UNAUTHORIZED",402:"INSUFFICIENT_CREDITS",404:"NOT_FOUND",429:"LIMIT"}[status]) || "SERVER";
+  const e = new Error((body && body.message) || "Request failed"); e.code = code; e.status = status; return e;
+}
+async function api(path, params){
+  const u = new URL("/api/" + path, location.origin);
+  Object.entries(params||{}).forEach(([k,v])=>{ if(v!=null) u.searchParams.set(k,v); });
+  let res, body=null;
+  try{ res = await fetch(u, {headers:{accept:"application/json"}}); }catch(e){ const er=new Error("offline"); er.code="OFFLINE"; throw er; }
+  try{ body = await res.json(); }catch(e){}
+  if(state.debug){ state.debugLog.unshift({at:new Date().toLocaleTimeString(), path:u.pathname+u.search, status:res.status, body}); state.debugLog=state.debugLog.slice(0,30); renderDebug(); }
+  if(!res.ok || !body || body.ok===false){ if(body && body.retryable && res.status===503){ await sleep(900); return api(path, params); } throw apiError(res.status, body); }
+  return body;
+}
+function errCopy(err){
+  const code = err && err.code;
+  switch(code){
+    case "NO_KEY": return {title:"Setup needed", text:"The railway data key is not added yet. Add IRCTC_DEV_API_KEY in Netlify → Site configuration → Environment variables, then redeploy."};
+    case "UNAUTHORIZED": case "INVALID_API_KEY": case "API_KEY_EXPIRED": case "MISSING_API_KEY":
+      return {title:"Railway data key not accepted", text:"The key may be wrong or expired. Create a new key at irctc.dev and replace it in Netlify."};
+    case "INSUFFICIENT_CREDITS": return {title:"Railway data credits used up", text:"Top up at irctc.dev. Searches will work again right after."};
+    case "LIMIT": case "RATE_LIMIT_EXCEEDED": return {title:"Too many searches right now", text:(err.message||"Wait a few minutes and try again.")};
+    case "UPSTREAM_DOWN": case "SERVICE_UNAVAILABLE": return {title:"Railway data service is not responding", text:"Wait a minute and search again."};
+    case "NOT_FOUND": return {title:"Not found", text:(err.message||"No data for this train or station.")};
+    case "OFFLINE": return {title:"You're offline", text:"Check your internet connection and search again."};
+    case "BAD_REQUEST": return {title:"Check your search", text:(err.message||"Some details are missing.")};
+    default: return {title:"Something went wrong", text:(err && err.message) || "Try the search again."};
+  }
+}
+function setConn(kind,text){ $("connDot").className="dot "+kind; $("connText").textContent=text; }
+async function initApi(){
+  try{
+    const h = await api("health");
+    state.apiReady = true; state.keySet = !!h.keySet;
+    if(h.keySet) setConn("on","Live data ready");
+    else { setConn("off","Setup needed"); notice("warn","Live data is not set up yet","Add the IRCTC_DEV_API_KEY in Netlify → Site configuration → Environment variables, then redeploy. The example below stays visible."); }
+  }catch(e){
+    state.apiReady = true; state.keySet = false;
+    setConn("off","Live data unavailable");
+    notice("info","Showing example results","Live search works on the published site. This copy can't reach the server.");
+  }
+}
+function renderDebug(){
+  let el=$("debug"); if(!el){ el=document.createElement("pre"); el.id="debug"; el.className="debug"; document.querySelector(".wrap").appendChild(el); }
+  el.textContent = state.debugLog.map(d=>d.at+"  "+d.status+"  "+d.path+"\n"+JSON.stringify(d.body,null,1).slice(0,2500)).join("\n\n");
+}
+
+/* ---------- notices ---------- */
+function notice(kind,title,text,btn){
+  const d=document.createElement("div"); d.className="notice "+kind;
+  d.innerHTML='<p><strong>'+esc(title)+'.</strong> '+esc(text)+'</p>';
+  if(btn){ const b=document.createElement("button"); b.className="btn ghost small"; b.type="button"; b.textContent=btn.label; b.onclick=btn.onClick; d.appendChild(b); }
+  $("notices").appendChild(d);
+}
+function clearNotices(){ $("notices").innerHTML=""; }
+function progress(on,text,frac){ $("progress").hidden=!on; if(text) $("progText").textContent=text; if(frac!=null) $("progBar").style.width=Math.round(frac*100)+"%"; }
+
+/* ---------- place autocomplete ---------- */
+function cityMatches(q){
+  const s=q.toLowerCase();
+  return CITIES.filter(c=>c.name.toLowerCase().startsWith(s)).map(c=>({kind:"city",name:c.name,label:c.name+" · all stations",codes:c.codes.slice()}));
+}
+function stationPlace(st){ return {kind:"station",name:st.name+" ("+st.code+")",label:st.name,codes:[st.code],sub:st.code+(st.state?" · "+st.state:"")}; }
+async function placeOptions(q){
+  const out=cityMatches(q);
+  const up=q.trim().toUpperCase();
+  if(/^[A-Z]{2,5}$/.test(up) && !out.length){ out.push({kind:"station",name:up,label:up,codes:[up],sub:"Station code"}); }
+  try{ const r=await api("stations",{q}); (r.data||[]).slice(0,7).forEach(st=>{ if(st && st.code && !out.some(o=>o.codes.length===1&&o.codes[0]===st.code)) out.push(stationPlace(st)); }); }catch(e){}
+  return out.slice(0,8);
+}
+function setupPlace(inputId,suggId,key){
+  const inp=$(inputId), box=$(suggId); let timer=null, items=[], act=-1, seq=0;
+  inp.addEventListener("input",()=>{ state[key]=null; clearTimeout(timer); const q=inp.value.trim(); if(q.length<2){ box.hidden=true; return; }
+    items=cityMatches(q); act=-1; render();
+    if(!state.keySet) return;
+    const my=++seq; timer=setTimeout(async()=>{ const r=await placeOptions(q); if(my!==seq) return; items=r; act=-1; render(); },320); });
+  inp.addEventListener("keydown",e=>{ if(box.hidden) return; if(e.key==="ArrowDown"){act=Math.min(items.length-1,act+1);render();e.preventDefault();} else if(e.key==="ArrowUp"){act=Math.max(0,act-1);render();e.preventDefault();} else if(e.key==="Enter"&&act>=0){pick(items[act]);e.preventDefault();} else if(e.key==="Escape"){box.hidden=true;} });
+  inp.addEventListener("blur",()=>setTimeout(()=>{box.hidden=true;},180));
+  function render(){ if(!items.length){box.hidden=true;return;} box.innerHTML=""; items.forEach((pl,i)=>{ const b=document.createElement("button"); b.type="button"; if(i===act) b.className="act";
+      b.innerHTML='<span>'+esc(pl.label)+'</span><small>'+esc(pl.kind==="city"?pl.codes.join(" · "):(pl.sub||""))+'</small>'; b.onmousedown=ev=>{ev.preventDefault();pick(pl);}; box.appendChild(b); }); box.hidden=false; }
+  function pick(pl){ state[key]=pl; inp.value=pl.kind==="city"?pl.name:pl.name; box.hidden=true; saveForm(); }
+}
+async function resolvePlace(key,inputId){
+  if(state[key]) return state[key];
+  const q=$(inputId).value.trim(); if(!q) throw {code:"input",message:"Enter a "+(key==="from"?"starting":"destination")+" city or station."};
+  const city=CITIES.find(c=>c.name.toLowerCase()===q.toLowerCase());
+  if(city){ state[key]={kind:"city",name:city.name,codes:city.codes.slice()}; return state[key]; }
+  const opts=await placeOptions(q);
+  if(!opts.length) throw {code:"input",message:"No station matched “"+q+"”. Try the city name or a station code like CNB."};
+  state[key]=opts[0]; return state[key];
+}
+function saveForm(){ try{ localStorage.setItem("abhirail-form",JSON.stringify({from:state.from,to:state.to,fromText:$("from").value,toText:$("to").value,cls:$("cls").value,quota:$("quota").value,tStart:$("tStart").value,tEnd:$("tEnd").value})); }catch(e){} }
+function loadForm(){ try{ const f=JSON.parse(localStorage.getItem("abhirail-form")||"null"); if(!f) return; state.from=f.from||null; state.to=f.to||null; if(f.fromText) $("from").value=f.fromText; if(f.toText) $("to").value=f.toText; if(f.cls) $("cls").value=f.cls; if(f.quota) $("quota").value=f.quota; if(f.tStart) $("tStart").value=f.tStart; if(f.tEnd) $("tEnd").value=f.tEnd; }catch(e){} }
+
+/* ---------- rows ---------- */
+function trainBase(o){
+  const tier=tierOf(o.name,o.type,o.no);
+  return Object.assign({tier:tier[0],tierLabel:tier[1]},o);
+}
+function rowsFromBoard(t,board,checkedAt,alts){
+  const want=classFilter();
+  const out=[];
+  if(t.noLive && !(board&&board.length)){
+    const cl=(t.classes||[]).filter(c=>!want||want.includes(c));
+    if(t.classes && t.classes.length && !cl.length) return out;
+    return [Object.assign({},t,{cls:cl.length?cl.join(" / "):"—",raw:null,st:{kind:"na",pct:null,label:"Check on IRCTC"},fare:null,checkedAt:null})];
+  }
+  const list=(board&&board.length)? board : (t.classes||[]).map(c=>({classCode:c,status:null,fare:(t.fares||{})[c]}));
+  list.forEach(b=>{
+    if(want && !want.includes(b.classCode)) return;
+    const st = b.status==null ? {kind:"na",pct:null,label: t.noLive? "Check on IRCTC" : (checkedAt? "No seat data" : "Not checked yet")} : readStatus(b.status);
+    const alt = pickAlt(alts,b.classCode,st);
+    out.push(Object.assign({},t,{cls:b.classCode,raw:b.status,st,fare:b.fare!=null?b.fare:((t.fares||{})[b.classCode]??null),checkedAt,alt}));
+  });
+  const boardHad = board && board.length;
+  if(!out.length && !boardHad){
+    out.push(Object.assign({},t,{cls:(t.classes&&t.classes.length)?t.classes.join(" / "):"—",raw:null,
+      st:{kind:"na",pct:null,label: t.noLive? "Check on IRCTC" : (checkedAt? "No seat data" : "Not checked yet")},fare:null,checkedAt:null}));
+  }
+  return out;
+}
+function pickAlt(alts,cls,st){
+  if(!alts || !alts.length || (st && st.pct===100)) return null;
+  const ok = alts.filter(a=>a.fullyConfirmed && (a.legs||[]).every(l=>l.classCode===cls));
+  if(!ok.length) return null;
+  const a=ok[0];
+  return {text:a.note||"", fare:a.totalFare, kind:a.kind};
+}
+function classFilter(){ const v=$("cls").value; if(v==="AC") return AC; if(v==="ANY") return null; return [v]; }
+
+/* ---------- search ---------- */
+const SEAT_CLASSES_AC=["3A","2A","1A","3E","CC","EC"];
+function pickField(o,names){ for(const n of names){ if(o && o[n]!=null && o[n]!=="") return o[n]; } return null; }
+function asClasses(v){ if(!v) return []; if(Array.isArray(v)) return v.map(c=>typeof c==="string"?c:(c.code||c.class||c.classCode)).filter(Boolean).map(s=>String(s).toUpperCase()); return String(v).toUpperCase().split(/[^0-9A-Z]+/).filter(Boolean); }
+function runsOn(item,date){
+  const rd=pickField(item,["runningDays","runsOn","running_days"]); if(rd==null) return true;
+  const offset=Number(pickField(item,["fromStationDayOffset","dayOffset"])||0);
+  const originDow=weekdayMon0(addDays(date,-offset));
+  if(typeof rd==="string" && /^[01YN]{7}$/i.test(rd)){ const ch=rd[originDow].toUpperCase(); return ch==="1"||ch==="Y"; }
+  if(Array.isArray(rd) && rd.length===7 && rd.every(x=>typeof x==="boolean"||x===0||x===1)) return !!rd[originDow];
+  return true;
+}
+function mapTrain(item,date){
+  const no=String(pickField(item,["trainNo","trainNumber","train_number"])||"");
+  const dep=parseHM(pickField(item,["departure","departs","fromStationDeparture"]));
+  let dur=Number(pickField(item,["durationMin","duration_minutes","durationMinutes"]));
+  if(!dur){ const arr=parseHM(pickField(item,["arrival","arrives"])); const dd=Number(pickField(item,["toStationDayOffset"])||0)-Number(pickField(item,["fromStationDayOffset"])||0); if(dep!=null&&arr!=null) dur=dd*1440+arr-dep+(arr<dep&&!dd?1440:0); }
+  const ef=pickField(item,["estimatedFare","fares"]); const fares={};
+  if(ef && typeof ef==="object" && !Array.isArray(ef)) Object.entries(ef).forEach(([k,v])=>{ const n=Number(typeof v==="object"&&v?v.totalFare:v); if(n) fares[k.toUpperCase()]=n; });
+  if(Array.isArray(ef)) ef.forEach(f=>{ if(f&&f.class) fares[String(f.class).toUpperCase()]=Number(f.totalFare||f.fare)||null; });
+  return trainBase({no,name:pickField(item,["trainName","train_name","name"])||"",type:pickField(item,["trainType","type"])||"",
+    fromCode:String(pickField(item,["fromStation","fromStationCode","from"])||"").toUpperCase(),fromName:pickField(item,["fromStationName"])||"",
+    toCode:String(pickField(item,["toStation","toStationCode","to"])||"").toUpperCase(),toName:pickField(item,["toStationName"])||"",
+    dep,dur:dur||null,date,classes:asClasses(pickField(item,["classes","availableClasses","classList"])),fares,source:"live"});
+}
+async function search(){
+  if(state.searching) return;
+  clearNotices();
+  if(!state.apiReady){ notice("info","Still connecting","Give it a moment and press Search again."); return; }
+  if(!state.keySet){ notice("warn","Live data is not set up yet","Add the railway data key in Netlify, then redeploy. The example below stays visible."); return; }
+  const date=$("date").value; const s=parseHM($("tStart").value)??0; const e=parseHM($("tEnd").value)??1439;
+  if(!date){ notice("warn","Pick a date","Choose your travel date and search again."); return; }
+  const todayIso=new Date(Date.now()+5.5*3600e3).toISOString().slice(0,10);
+  if(date<todayIso){ notice("warn","That date has passed","Pick today or a later date."); return; }
+  state.searching=true; $("go").disabled=true; $("go").textContent="Searching…";
+  state.example=false; state.rows=[]; state.pending=[];
+  saveForm(); render();
+  try{
+    progress(true,"Finding stations…",0.05);
+    const [from,to]=await Promise.all([resolvePlace("from","from"),resolvePlace("to","to")]);
+    if(from.codes.join()===to.codes.join()) throw {code:"input",message:"From and To are the same place."};
+    const quota=$("quota").value;
+    const pairs=[]; from.codes.forEach(a=>to.codes.forEach(b=>{ if(a!==b) pairs.push([a,b]); }));
+    const usePairs=pairs.slice(0,MAX_PAIRS);
+    progress(true,"Finding trains "+(from.label||from.name)+" → "+(to.label||to.name)+"…",0.12);
+    const seen=new Map(); let errs=0, lastErr=null;
+    await pool(usePairs,3,async([a,b])=>{
+      try{ const r=await api("trains",{from:a,to:b,date}); (r.data||[]).forEach(it=>{ if(!runsOn(it,date)) return; const t=mapTrain(it,date); if(!t.no||seen.has(t.no)) return; if(!t.fromCode) t.fromCode=a; if(!t.toCode) t.toCode=b; seen.set(t.no,t); }); }
+      catch(err){ errs++; lastErr=err; if(["NO_KEY","UNAUTHORIZED","INSUFFICIENT_CREDITS","LIMIT"].includes(err.code)) throw err; }
+    });
+    if(errs===usePairs.length && lastErr) throw lastErr;
+    let trains=[...seen.values()].filter(t=>inWindow(t.dep,s,e));
+    const fromSet=new Set(from.codes), toSet=new Set(to.codes);
+    NEW_TRAINS.forEach(n=>{ if(seen.has(n.no)) return;
+      const i=n.stops.findIndex(x=>fromSet.has(x[0])); if(i<0) return;
+      const j=n.stops.findIndex((x,k)=>k>i && toSet.has(x[0])); if(j<0) return;
+      const a=n.stops[i], b=n.stops[j]; const dep=parseHM(a[3]); if(!inWindow(dep,s,e)) return;
+      const originDate=addDays(date,-(a[2]-1)); if(n.offDay!=null && weekdayMon0(originDate)===n.offDay) return;
+      const dur=(b[2]-a[2])*1440+parseHM(b[3])-dep;
+      trains.push(trainBase({no:n.no,name:n.name,type:n.type,fromCode:a[0],fromName:a[1],toCode:b[0],toName:b[1],dep,dur,date,classes:n.classes,fares:{},source:"new",runNote:n.runNote,probe:true}));
+    });
+    trains.sort((x,y)=>relDep(x.dep,s)-relDep(y.dep,s));
+    state.ctx={from,to,date,s,e,quota,total:trains.length,checkedAt:null};
+    if(pairs.length>MAX_PAIRS) notice("info","Searching the main stations only","This city pair has "+pairs.length+" station combinations. AbhiRail checks the first "+MAX_PAIRS+" to save data. Pick a specific station to search others.");
+    if(!trains.length){ progress(false); render(); notice("info","No trains in this window","No trains leave "+(from.name)+" for "+(to.name)+" between "+fmtHM(s)+" and "+fmtHM(e)+" on "+fmtDate(date)+". Widen the time window or try nearby dates."); }
+    else{
+      trains.forEach(t=>{ state.rows.push(...rowsFromBoard(t,null,null,null)); });
+      render();
+      state.pending=trains.slice(SEAT_CHECK_CAP);
+      await checkSeats(trains.slice(0,SEAT_CHECK_CAP));
+    }
+  }catch(err){
+    progress(false);
+    if(err && err.code==="input") notice("warn","Check your search",err.message);
+    else { const c=errCopy(err); notice(["LIMIT","UPSTREAM_DOWN","OFFLINE"].includes(err&&err.code)?"warn":"bad",c.title,c.text); }
+  }finally{
+    state.searching=false; $("go").disabled=false; $("go").textContent="Search live seats"; progress(false); render();
+  }
+}
+function relDep(d,s){ if(d==null) return 1e6; return ((d-s)+1440)%1440; }
+function classesToCheck(t){
+  const want=classFilter();
+  let cl=(t.classes&&t.classes.length)? t.classes.slice() : (want? want.filter(c=>["3A","2A","1A","CC"].includes(c)) : ["SL","3A","2A","1A"]);
+  if(want) cl=cl.filter(c=>want.includes(c));
+  return cl.filter(c=>["1A","2A","3A","3E","CC","EC","SL","2S"].includes(c));
+}
+async function checkSeats(trains){
+  let done=0; const total=trains.length; let blocking=null;
+  progress(true,"Checking seats on "+total+" trains…",0.25);
+  await pool(trains,3,async(t)=>{
+    if(blocking) return;
+    const cls=classesToCheck(t);
+    if(!cls.length){ setRows(t.no,[]); done++; return; }
+    let fares=t.fares||{}, at=0, liveFound=false, errText=null;
+    try{ const fr=await api("fare",{train:t.no,from:t.fromCode,to:t.toCode,quota:state.ctx.quota}); fares=Object.assign({},fares,fr.data.fares||{}); at=Math.max(at,(fr.cachedAt||0)*1000); }catch(err){ if(["NO_KEY","UNAUTHORIZED","INSUFFICIENT_CREDITS"].includes(err.code)) blocking=err; }
+    const board=[];
+    for(const c of cls){
+      if(blocking) break;
+      try{ const r=await api("availability",{train:t.no,from:t.fromCode,to:t.toCode,date:t.date,class:c,quota:state.ctx.quota});
+        liveFound=true; at=Math.max(at,(r.cachedAt||0)*1000);
+        board.push({classCode:c,status:r.data.status||null,fare:fares[c]??null});
+      }catch(err){
+        if(["NO_KEY","UNAUTHORIZED","INSUFFICIENT_CREDITS","LIMIT"].includes(err.code)){ blocking=err; break; }
+        if(err.code!=="NOT_FOUND") errText=errCopy(err).title;
+        board.push({classCode:c,status:null,fare:fares[c]??null});
+      }
+    }
+    const tt=Object.assign({},t,{fares});
+    if(t.probe && !liveFound) tt.noLive=true;
+    let rows=rowsFromBoard(tt, tt.noLive?null:board, at||Date.now(), null);
+    if(errText) rows=rows.map(r=>Object.assign(r,{errText}));
+    setRows(t.no,rows);
+    state.ctx.checkedAt=Math.max(state.ctx.checkedAt||0,at||Date.now());
+    done++; progress(true,"Checked "+done+" of "+total+" trains",0.25+0.75*done/total); render();
+  });
+  if(blocking){ const c=errCopy(blocking); notice("bad",c.title,c.text); }
+  progress(false); render();
+}
+function setRows(no,newRows){ const i=state.rows.findIndex(r=>r.no===no); state.rows=state.rows.filter(r=>r.no!==no); if(i<0) state.rows.push(...newRows); else state.rows.splice(Math.min(i,state.rows.length),0,...newRows); }
+
+/* ---------- render ---------- */
+function sortRows(rows){
+  const k=state.sort, s=state.ctx?state.ctx.s:0;
+  const q=r=> (state.ratings[r.no]!=null? state.ratings[r.no] : r.tier);
+  const byDep=(a,b)=>relDep(a.dep,s)-relDep(b.dep,s);
+  const f={
+    chance:(a,b)=> ((b.st.pct??-1)-(a.st.pct??-1)) || ((a.fare??1e9)-(b.fare??1e9)) || byDep(a,b),
+    price:(a,b)=> ((a.fare??1e9)-(b.fare??1e9)) || ((b.st.pct??-1)-(a.st.pct??-1)),
+    dep:(a,b)=> byDep(a,b) || ((b.st.pct??-1)-(a.st.pct??-1)),
+    dur:(a,b)=> ((a.dur??1e9)-(b.dur??1e9)) || ((b.st.pct??-1)-(a.st.pct??-1)),
+    quality:(a,b)=> (q(b)-q(a)) || ((b.st.pct??-1)-(a.st.pct??-1))
+  }[k];
+  return rows.slice().sort(f);
+}
+const CLS_ORDER=["SL","3E","3A","2A","1A","CC","EC","2S"];
+function shortStatus(st){
+  if(st.pct===100){ const m=String(st.label).match(/(\d+)\s*left/); return m? "Available "+m[1] : "Available"; }
+  if(st.wl!=null) return "WL "+st.wl;
+  if(/^RAC/.test(st.label)) return st.label.replace(" · can travel","");
+  if(/regret/i.test(st.label)) return "Full";
+  return st.label;
+}
+function groupTrains(rows){
+  const map=new Map();
+  rows.forEach(r=>{
+    let g=map.get(r.no);
+    if(!g){ g=Object.assign({},r,{tiles:[],alts:[]}); map.set(r.no,g); }
+    g.tiles.push(r); if(r.alt) g.alts.push(Object.assign({cls:r.cls},r.alt));
+    if(r.checkedAt) g.checkedAt=Math.max(g.checkedAt||0,r.checkedAt);
+    if(r.errText) g.errText=r.errText;
+  });
+  return [...map.values()].map(g=>{
+    g.tiles.sort((a,b)=>{ const ia=CLS_ORDER.indexOf(a.cls), ib=CLS_ORDER.indexOf(b.cls); return (ia<0?99:ia)-(ib<0?99:ib); });
+    const scored=g.tiles.filter(t=>t.st.pct!=null);
+    g.best=scored.slice().sort((a,b)=>(b.st.pct-a.st.pct)||((a.fare??1e9)-(b.fare??1e9)))[0]||null;
+    g.bestPct=g.best? g.best.st.pct : null;
+    const live=g.tiles.filter(t=>t.fare!=null && (t.st.pct==null || t.st.pct>0));
+    g.minFare=live.length? Math.min(...live.map(t=>t.fare)) : null;
+    return g;
+  });
+}
+function sortTrains(list){
+  const k=state.sort, s=state.ctx?state.ctx.s:0;
+  const q=g=> (state.ratings[g.no]!=null? state.ratings[g.no] : g.tier);
+  const byDep=(a,b)=>relDep(a.dep,s)-relDep(b.dep,s);
+  const pc=g=> g.notRunning? -2 : (g.bestPct??-1);
+  const f={
+    chance:(a,b)=> (pc(b)-pc(a)) || (((a.best&&a.best.fare)??1e9)-((b.best&&b.best.fare)??1e9)) || byDep(a,b),
+    price:(a,b)=> ((a.minFare??1e9)-(b.minFare??1e9)) || (pc(b)-pc(a)),
+    dep:(a,b)=> byDep(a,b) || (pc(b)-pc(a)),
+    dur:(a,b)=> ((a.dur??1e9)-(b.dur??1e9)) || (pc(b)-pc(a)),
+    quality:(a,b)=> (q(b)-q(a)) || (pc(b)-pc(a))
+  }[k];
+  return list.slice().sort(f);
+}
+function render(){
+  const all=sortTrains(groupTrains(state.rows));
+  const list=all.filter(g=> state.show==="all" || (state.show==="confirmed" ? g.tiles.some(t=>t.st.pct===100) : (g.bestPct!=null && g.bestPct>=60)) );
+  const box=$("rows"); box.innerHTML="";
+  if(!list.length){
+    box.innerHTML='<div class="empty">'+(state.searching?"Looking for trains…":(all.length?"No trains match this filter. Choose All to see every train.":"Search to see trains and seat status."))+'</div>';
+  }
+  list.forEach(g=>{
+    const card=document.createElement("article");
+    const dead = g.notRunning || (g.bestPct===0);
+    card.className="tcard"+(dead?" dim":"");
+    const arrAbs=(g.dep!=null&&g.dur!=null)? g.dep+g.dur : null; const plus=arrAbs!=null? Math.floor(arrAbs/1440):0;
+    const rating=state.ratings[g.no];
+    const stars='<span class="stars" role="group" aria-label="Your rating for '+esc(g.no)+'">'+[1,2,3,4,5].map(n=>'<button type="button" data-rate="'+n+'" data-no="'+esc(g.no)+'" class="'+(rating>=n?"on":"")+'" aria-label="Rate '+n+' of 5">★</button>').join("")+'</span>';
+    const tiles=g.tiles.map(t=>{
+      const p=t.st.pct; const isBest = g.best && t===g.best && p!=null && p>0 && g.tiles.length>1;
+      const k = p==null? "na" : (p===100?"ok":(p>=60?"good":(p>=35?"warn":"bad")));
+      const wide = /\//.test(t.cls) ? " wide" : "";
+      return '<div class="ct k-'+k+(isBest?" best":"")+wide+'" title="'+esc(t.raw||t.st.label)+'">'+
+        '<div class="ct-h"><span class="cls">'+esc(t.cls)+'</span>'+(isBest?'<span class="besttag">Best</span>':"")+'</div>'+
+        '<div class="ct-p">'+(p==null?"—":p+"%")+'</div>'+
+        '<div class="track"><i style="width:'+(p||0)+'%;background:'+chanceColor(p)+'"></i></div>'+
+        '<div class="ct-s">'+esc(shortStatus(t.st))+(t.st.est?' <span class="est">est.</span>':"")+'</div>'+
+        '<div class="ct-f">'+(t.fare!=null?fmtINR(t.fare):"&nbsp;")+'</div>'+
+      '</div>';
+    }).join("");
+    const notes=[];
+    if(g.notRunning) notes.push('<div class="note w">Does not run on this date'+(g.nextRun?(" · next: "+esc(fmtDate(g.nextRun))):"")+'</div>');
+    else if(g.runNote) notes.push('<div class="note w">'+esc(g.runNote)+'</div>');
+    g.alts.slice(0,1).forEach(a=>notes.push('<div class="note ok">'+esc(a.cls)+' confirmed another way: '+esc(a.text)+(a.fare?" ("+fmtINR(a.fare)+")":"")+'</div>'));
+    if(g.errText) notes.push('<div class="note w">'+esc(g.errText)+'</div>');
+    card.innerHTML=
+      '<div class="tc-time">'+
+        '<div class="tt"><span class="time big">'+(g.dep!=null?fmtHM(g.dep):"—")+'</span><span class="arrow">→</span><span class="time big">'+(arrAbs!=null?fmtHM(arrAbs):"—")+'</span>'+(plus>0?'<span class="plus">+'+plus+'</span>':"")+'</div>'+
+        '<div class="sub">'+esc(g.fromCode)+' → '+esc(g.toCode)+' · '+fmtDur(g.dur)+'</div>'+
+      '</div>'+
+      '<div class="tc-train">'+
+        '<div><span class="tn">'+esc(g.no)+'</span>'+(g.source==="new"?'<span class="newtag">New</span>':"")+'</div>'+
+        '<div class="tname">'+esc(titleCase(g.name))+'</div>'+
+        '<div class="tier"><span class="tierchip">'+esc(g.tierLabel)+'</span>'+stars+'</div>'+
+      '</div>'+
+      '<div class="tc-classes">'+tiles+'</div>'+
+      (notes.length?'<div class="tc-notes">'+notes.join("")+'</div>':"")+
+      '<div class="tc-foot"><span class="sub">'+(g.checkedAt?"Checked "+esc(ago(g.checkedAt)):(g.source==="new"?"Not in live data yet":""))+'</span>'+
+        '<span class="links"><a href="'+IRCTC+'" target="_blank" rel="noopener">Book on IRCTC</a>'+(g.source!=="new"?'<a href="https://www.railroute.in/train/'+encodeURIComponent(g.no)+'" target="_blank" rel="noopener">Train details</a>':"")+'</span></div>';
+    box.appendChild(card);
+  });
+  renderSummary(sortRows(state.rows));
+  renderMore();
+  document.querySelectorAll("#sortSeg [data-sort]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.sort===state.sort?"true":"false"));
+  document.querySelectorAll("#showSeg [data-show]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.show===state.show?"true":"false"));
+  $("meta").textContent += (all.length && list.length<all.length) ? " · showing "+list.length+" of "+all.length+" trains" : "";
+}
+function titleCase(s){ s=String(s||""); if(s!==s.toUpperCase()) return s; return s.toLowerCase().replace(/\b([a-z])/g,m=>m.toUpperCase()).replace(/\b(Sf|Ac|Spl|Ndls|Bkn|Rnc|Rjpb|Dbg|Ssb|Irctc|Ltt|Bdts|Csmt|Cnb|Gct)\b/g,m=>m.toUpperCase()); }
+function renderSummary(rows){
+  const el=$("summary");
+  const ctx=state.ctx;
+  const trainsN=new Set(rows.map(r=>r.no)).size;
+  const conf=rows.filter(r=>r.st.pct===100&&!r.notRunning);
+  const best=rows.filter(r=>r.st.pct!=null&&!r.notRunning).sort((a,b)=>(b.st.pct-a.st.pct)||((a.fare??1e9)-(b.fare??1e9))||(relDep(a.dep,ctx?ctx.s:0)-relDep(b.dep,ctx?ctx.s:0)))[0];
+  const cheapConf=conf.slice().sort((a,b)=>(a.fare??1e9)-(b.fare??1e9))[0];
+  const label = state.example ? EXAMPLE.label : (ctx? ctx.from.name+" → "+ctx.to.name+" · "+fmtDate(ctx.date)+" · "+fmtHM(ctx.s)+"–"+fmtHM(ctx.e) : "");
+  const checked = state.example ? EXAMPLE.checkedAt : (ctx&&ctx.checkedAt);
+  el.innerHTML=
+    '<div class="tile best"><span class="k">Best pick</span>'+(best?'<span class="v">'+esc(best.no)+' '+esc(titleCase(best.name))+' · '+esc(best.cls)+'</span><span class="s">'+(best.st.pct===100?"Confirmed now":"About "+best.st.pct+"% chance")+' · leaves '+fmtHM(best.dep)+' · '+fmtINR(best.fare)+'</span>':'<span class="v">—</span><span class="s">Search to find the best option</span>')+'</div>'+
+    '<div class="tile"><span class="k">Trains in window</span><span class="v">'+trainsN+'</span><span class="s">'+esc(label)+'</span></div>'+
+    '<div class="tile"><span class="k">Confirmed now</span><span class="v">'+conf.length+'</span><span class="s">'+(conf.length?"class options with open berths":"none yet; waitlist only")+'</span></div>'+
+    '<div class="tile"><span class="k">Cheapest confirmed</span><span class="v">'+(cheapConf?fmtINR(cheapConf.fare):"—")+'</span><span class="s">'+(cheapConf?esc(cheapConf.no)+" · "+esc(cheapConf.cls):"")+'</span></div>';
+  $("meta").textContent = state.example ? "Example results · checked "+new Date(EXAMPLE.checkedAt).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",timeZone:"Asia/Kolkata"})+" IST" : (checked? "Seats checked "+ago(checked) : "");
+}
+function renderMore(){
+  const w=$("moreWrap"); w.innerHTML="";
+  if(state.pending.length && !state.searching){
+    const b=document.createElement("button"); b.className="btn ghost"; b.type="button"; b.textContent="Check seats on "+state.pending.length+" more trains";
+    b.onclick=async()=>{ const next=state.pending.splice(0,SEAT_CHECK_CAP); state.searching=true; render(); await checkSeats(next); state.searching=false; render(); };
+    w.appendChild(b);
+  }
+}
+
+/* ---------- example ---------- */
+function loadExample(){
+  state.ctx={from:{name:"Kanpur"},to:{name:"Delhi"},date:"2026-11-16",s:0,e:480,quota:"GN",checkedAt:EXAMPLE.checkedAt};
+  EXAMPLE.trains.forEach(x=>{ const t=trainBase({no:x[0],name:x[1],type:x[2],fromCode:x[3],toCode:x[4],dep:parseHM(x[5]),dur:x[6],date:"2026-11-16",classes:[],fares:{},source:"live"});
+    state.rows.push(...rowsFromBoard(t,x[7].map(b=>({classCode:b[0],status:b[1],fare:b[2]})),EXAMPLE.checkedAt,null)); });
+  const vb=NEW_TRAINS[0]; const t=trainBase({no:vb.no,name:vb.name,type:vb.type,fromCode:"CNB",fromName:"Kanpur Central",toCode:"NDLS",toName:"New Delhi",dep:40,dur:330,date:"2026-11-16",classes:vb.classes,fares:{},source:"new",runNote:vb.runNote,noLive:true});
+  state.rows.push(...rowsFromBoard(t,null,null,null));
+}
+
+/* ---------- wiring ---------- */
+setupPlace("from","fromSugg","from"); setupPlace("to","toSugg","to");
+$("swap").onclick=()=>{ const a=$("from").value; $("from").value=$("to").value; $("to").value=a; const p=state.from; state.from=state.to; state.to=p; saveForm(); };
+$("form").addEventListener("submit",e=>{ e.preventDefault(); search(); });
+document.addEventListener("click",e=>{
+  const sb=e.target.closest("[data-sort]"); if(sb){ state.sort=sb.dataset.sort; render(); return; }
+  const fb=e.target.closest("[data-show]"); if(fb){ state.show=fb.dataset.show; render(); return; }
+  const rb=e.target.closest("[data-rate]"); if(rb){ const no=rb.dataset.no, n=+rb.dataset.rate; if(state.ratings[no]===n) delete state.ratings[no]; else state.ratings[no]=n; saveRatings(); render(); }
+});
+$("cls").addEventListener("change",()=>{ if(state.example){ state.rows=[]; loadExample(); render(); } });
+try{ const d=new Date(Date.now()+5.5*3600e3).toISOString().slice(0,10); $("date").min=d; }catch(e){}
+loadExample(); render();
+loadForm();
+initApi();
+if("serviceWorker" in navigator){ window.addEventListener("load",()=>{ navigator.serviceWorker.register("/sw.js").catch(()=>{}); }); }
+setInterval(()=>{ if(!state.searching) renderSummary(sortRows(state.rows)); },60000);
+})();
+</script>
+</body>
+</html>

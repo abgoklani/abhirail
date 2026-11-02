@@ -1,0 +1,10 @@
+{
+  "name": "abhirail",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AbhiRail: live train seat status and confirmation chance",
+  "dependencies": {
+    "@netlify/blobs": "11.1.4"
+  }
+}
