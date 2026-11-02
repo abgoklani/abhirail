@@ -219,7 +219,7 @@ th{background:#111;position:sticky;top:0}
   .hero p{font-size:15px}
   .logo .mark{height:34px} .logo .wordmark{height:21px}
   .conn{font-size:12px;padding:5px 10px}
-  form.search{grid-template-columns:1fr 1fr;grid-template-areas:"from from" "to to" "date cls" "time time" "row row";gap:12px;padding:14px}
+  form.search{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"from from" "to to" "date date" "time time" "cls cls" "row row";gap:12px;padding:14px}
   .f-from{grid-area:from} .f-to{grid-area:to} .f-date{grid-area:date} .f-class{grid-area:cls} .f-time{grid-area:time} .row2{grid-area:row}
   #from,#to{padding-right:52px}
   .swap{grid-area:from;justify-self:end;align-self:end;width:38px;height:38px;margin:0 3px 2px 0;transform:rotate(90deg);background:var(--raise);z-index:2}
@@ -273,6 +273,20 @@ th{background:#111;position:sticky;top:0}
 @media (prefers-reduced-motion: reduce){ .bar i{transition:none} }
 @media (max-width: 760px){ .summary{grid-template-columns:repeat(3,minmax(0,1fr))} .tile.best{grid-column:1/-1} }
 .debug{background:#050505;border:1px dashed #333;border-radius:8px;padding:12px;font:11px/1.4 var(--font-mono);color:#9a9a9a;white-space:pre-wrap;max-height:480px;overflow:auto}
+input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appearance:none;appearance:none;display:block;min-height:44px;line-height:1.2}
+input[type="date"]::-webkit-date-and-time-value,input[type="time"]::-webkit-date-and-time-value{text-align:left}
+.timepair{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:6px;align-items:center}
+.field{min-width:0}
+@media (max-width: 760px){ .row2{display:grid;grid-template-columns:1fr;gap:12px} .row2 .opts{display:block} .timepair span{font-size:13px} }
+@media (max-width: 760px){ form.search{grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important} form.search > .field, form.search > .row2{width:100%} .btn.primary{width:100%} }
+@media (max-width: 760px){ form.search{grid-template-areas:none !important}
+ form.search .f-from{grid-column:1/-1 !important;grid-row:1 !important}
+ form.search .swap{grid-column:1/-1 !important;grid-row:1 !important;justify-self:end;align-self:end}
+ form.search .f-to{grid-column:1/-1 !important;grid-row:2 !important}
+ form.search .f-date{grid-column:1/-1 !important;grid-row:3 !important}
+ form.search .f-time{grid-column:1/-1 !important;grid-row:4 !important}
+ form.search .f-class{grid-column:1/-1 !important;grid-row:5 !important}
+ form.search .row2{grid-column:1/-1 !important;grid-row:6 !important} }
 </style>
 </head>
 <body>
@@ -700,7 +714,7 @@ async function search(){
     const usePairs=pairs.slice(0,MAX_PAIRS);
     progress(true,"Finding trains "+(from.label||from.name)+" → "+(to.label||to.name)+"…",0.12);
     const seen=new Map(); let errs=0, lastErr=null;
-    await pool(usePairs,3,async([a,b])=>{
+    await pool(usePairs,5,async([a,b])=>{
       try{ const r=await api("trains",{from:a,to:b,date}); (r.data||[]).forEach(it=>{ if(!runsOn(it,date)) return; const t=mapTrain(it,date); if(!t.no||seen.has(t.no)) return; if(!t.fromCode) t.fromCode=a; if(!t.toCode) t.toCode=b; seen.set(t.no,t); }); }
       catch(err){ errs++; lastErr=err; if(["NO_KEY","UNAUTHORIZED","INSUFFICIENT_CREDITS","LIMIT"].includes(err.code)) throw err; }
     });
@@ -742,34 +756,30 @@ function classesToCheck(t){
 }
 async function checkSeats(trains){
   let done=0; const total=trains.length; let blocking=null;
+  const want=classFilter();
   progress(true,"Checking seats on "+total+" trains…",0.25);
-  await pool(trains,3,async(t)=>{
+  await pool(trains,6,async(t)=>{
     if(blocking) return;
-    const cls=classesToCheck(t);
-    let fares=t.fares||{}, at=0, liveFound=false, errText=null;
-    try{ const fr=await api("fare",{train:t.no,from:t.fromCode,to:t.toCode,quota:state.ctx.quota}); fares=Object.assign({},fares,fr.data.fares||{}); at=Math.max(at,(fr.cachedAt||0)*1000);
-      const carried=[...(fr.data.classes||[]),...Object.keys(fr.data.fares||{})].map(c=>String(c).toUpperCase());
-      if(carried.length && !(t.classes&&t.classes.length)){ t.classes=[...new Set(carried)]; cls.splice(0,cls.length,...classesToCheck(t)); }
-    }catch(err){ if(["NO_KEY","UNAUTHORIZED","INSUFFICIENT_CREDITS"].includes(err.code)) blocking=err; }
-    if(!cls.length){ setRows(t.no,[]); done++; progress(true,"Checked "+done+" of "+total+" trains",0.25+0.75*done/total); render(); return; }
-    const board=[];
-    for(const c of cls){
-      if(blocking) break;
-      try{ const r=await api("availability",{train:t.no,from:t.fromCode,to:t.toCode,date:t.date,class:c,quota:state.ctx.quota});
-        liveFound=true; at=Math.max(at,(r.cachedAt||0)*1000);
-        board.push({classCode:c,status:r.data.status||null,fare:fares[c]??null});
-      }catch(err){
-        if(["NO_KEY","UNAUTHORIZED","INSUFFICIENT_CREDITS","LIMIT"].includes(err.code)){ blocking=err; break; }
-        if(err.code!=="NOT_FOUND") errText=errCopy(err).title;
-        board.push({classCode:c,status:null,fare:fares[c]??null});
+    try{
+      const r=await api("seats",{train:t.no,from:t.fromCode,to:t.toCode,date:t.date,quota:state.ctx.quota,classes:want?want.join(","):""});
+      const d=r.data||{}; const at=(r.cachedAt||0)*1000||Date.now();
+      const fares=Object.assign({},t.fares||{},d.fares||{});
+      const seats=d.seats||[];
+      const tt=Object.assign({},t,{fares,classes:d.classes&&d.classes.length?d.classes:t.classes});
+      const anyLive=seats.some(x=>x.status);
+      if(t.probe && !anyLive){ setRows(t.no,rowsFromBoard(Object.assign({},t,{noLive:true}),null,null,null)); }
+      else if(!seats.length){ setRows(t.no, d.known? [] : rowsFromBoard(tt,null,at,null)); }
+      else {
+        let rows=rowsFromBoard(tt,seats.map(x=>({classCode:x.class,status:x.status,fare:x.fare??fares[x.class]??null})),at,null);
+        const failed=seats.filter(x=>x.error && x.error!=="NOT_FOUND");
+        if(failed.length) rows=rows.map(rw=>Object.assign(rw,{errText:"Some classes could not be checked"}));
+        setRows(t.no,rows);
       }
+      state.ctx.checkedAt=Math.max(state.ctx.checkedAt||0,at);
+    }catch(err){
+      if(["NO_KEY","UNAUTHORIZED","INSUFFICIENT_CREDITS","LIMIT"].includes(err.code)){ blocking=err; }
+      else setRows(t.no,rowsFromBoard(Object.assign({},t,t.probe?{noLive:true}:{}),null,null,null).map(rw=>Object.assign(rw,{errText:errCopy(err).title})));
     }
-    const tt=Object.assign({},t,{fares});
-    if(t.probe && !liveFound) tt.noLive=true;
-    let rows=rowsFromBoard(tt, tt.noLive?null:board, at||Date.now(), null);
-    if(errText) rows=rows.map(r=>Object.assign(r,{errText}));
-    setRows(t.no,rows);
-    state.ctx.checkedAt=Math.max(state.ctx.checkedAt||0,at||Date.now());
     done++; progress(true,"Checked "+done+" of "+total+" trains",0.25+0.75*done/total); render();
   });
   if(blocking){ const c=errCopy(blocking); notice("bad",c.title,c.text); }

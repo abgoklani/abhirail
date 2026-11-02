@@ -10,22 +10,24 @@ const TTL = {
 const env = (k) => (globalThis.Netlify && globalThis.Netlify.env ? globalThis.Netlify.env.get(k) : process.env[k]);
 
 const memory = new Map();
-
-function store(name) {
+let cacheStore = null;
+function store() {
+  if (cacheStore) return cacheStore;
   try {
-    return getStore({ name, consistency: "eventual" });
+    cacheStore = getStore({ name: "rail-cache", consistency: "eventual" });
   } catch {
-    return {
-      async get(k, o) { const v = memory.get(name + ":" + k); return v == null ? null : (o && o.type === "json" ? JSON.parse(v) : v); },
-      async setJSON(k, v) { memory.set(name + ":" + k, JSON.stringify(v)); },
+    cacheStore = {
+      async get(k) { const v = memory.get(k); return v == null ? null : JSON.parse(v); },
+      async setJSON(k, v) { memory.set(k, JSON.stringify(v)); },
     };
   }
+  return cacheStore;
 }
 
-function json(body, status = 200, extra = {}) {
+function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...extra },
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
   });
 }
 function fail(status, code, message) {
@@ -37,32 +39,34 @@ const TRAIN = /^\d{5}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const CLASSES = new Set(["1A", "2A", "3A", "3E", "CC", "EC", "SL", "2S", "FC", "EV", "VS"]);
 const QUOTAS = new Set(["GN", "TQ", "PT", "SS", "LD"]);
+const BLOCKING = new Set(["NO_KEY", "UNAUTHORIZED", "INVALID_API_KEY", "API_KEY_EXPIRED", "MISSING_API_KEY", "INSUFFICIENT_CREDITS"]);
 const toDMY = (iso) => iso.split("-").reverse().join("-");
 
+class Upstream extends Error {
+  constructor(status, code, message) { super(message); this.status = status; this.code = code; }
+}
+
 async function cached(kind, key, loader) {
-  const cache = store("rail-cache");
+  const cache = store();
   const now = Math.floor(Date.now() / 1000);
+  const k = kind + "/" + key;
   let hit = null;
-  try { hit = await cache.get(kind + "/" + key, { type: "json" }); } catch {}
+  try { hit = await cache.get(k, { type: "json" }); } catch {}
   if (hit && hit.exp > now) {
     if (hit.notFound) throw new Upstream(404, "NOT_FOUND", hit.message || "Not found.");
-    return { data: hit.data, cachedAt: hit.at, cached: true };
+    return { data: hit.data, cachedAt: hit.at };
   }
   let data;
   try {
     data = await loader();
   } catch (e) {
     if (e instanceof Upstream && e.status === 404) {
-      try { await cache.setJSON(kind + "/" + key, { notFound: true, message: e.message, at: now, exp: now + 6 * 3600 }); } catch {}
+      try { await cache.setJSON(k, { notFound: true, message: e.message, at: now, exp: now + 6 * 3600 }); } catch {}
     }
     throw e;
   }
-  try { await cache.setJSON(kind + "/" + key, { data, at: now, exp: now + TTL[kind] }); } catch {}
-  return { data, cachedAt: now, cached: false };
-}
-
-class Upstream extends Error {
-  constructor(status, code, message) { super(message); this.status = status; this.code = code; }
+  try { await cache.setJSON(k, { data, at: now, exp: now + TTL[kind] }); } catch {}
+  return { data, cachedAt: now };
 }
 
 async function upstream(path, params) {
@@ -73,12 +77,12 @@ async function upstream(path, params) {
   let res;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      res = await fetch(url, { headers: { Authorization: "Bearer " + key, "x-api-key": key, accept: "application/json" }, signal: AbortSignal.timeout(15000) });
+      res = await fetch(url, { headers: { Authorization: "Bearer " + key, accept: "application/json" }, signal: AbortSignal.timeout(12000) });
     } catch {
-      if (attempt === 0) { await new Promise((r) => setTimeout(r, 600)); continue; }
+      if (attempt === 0) { await new Promise((r) => setTimeout(r, 400)); continue; }
       throw new Upstream(503, "UPSTREAM_DOWN", "The railway data service did not respond.");
     }
-    if ((res.status === 429 || res.status >= 500) && attempt === 0) { await new Promise((r) => setTimeout(r, 800)); continue; }
+    if ((res.status === 429 || res.status >= 500) && attempt === 0) { await new Promise((r) => setTimeout(r, 600)); continue; }
     break;
   }
   let body = null;
@@ -90,7 +94,26 @@ async function upstream(path, params) {
   return body;
 }
 
-export default async (req, context) => {
+function getFare(train, from, to, quota) {
+  return cached("fare", [train, from, to, quota].join("-"), async () => {
+    const b = await upstream("/api/v1/trains/" + train + "/fare", { from, to, class: "all", quota });
+    const fares = {};
+    (b.fares || (b.data && b.data.fares) || []).forEach((f) => { if (f && f.class) fares[String(f.class).toUpperCase()] = f.totalFare ?? (f.breakup && f.breakup.total) ?? null; });
+    const classes = (b.availableClasses || []).map((c) => String(c.code || c).toUpperCase()).filter(Boolean);
+    return { fares, classes };
+  });
+}
+
+function getAvailability(train, from, to, date, cls, quota) {
+  return cached("availability", [train, from, to, date, cls, quota].join("-"), async () => {
+    const b = await upstream("/api/v1/trains/" + train + "/availability", { from, to, date: toDMY(date), class: cls, quota });
+    const list = Array.isArray(b.availability) ? b.availability : (b.data && b.data.availability) || [];
+    const day = list.find((a) => a.date === date || a.date === toDMY(date)) || null;
+    return { status: day ? day.status : null, days: list.slice(0, 6), trainName: b.trainName || null };
+  });
+}
+
+export default async (req) => {
   const url = new URL(req.url);
   const route = url.pathname.replace(/^\/api\/?/, "").replace(/\/$/, "");
   const q = url.searchParams;
@@ -101,9 +124,7 @@ export default async (req, context) => {
     if (route === "stations") {
       const term = (q.get("q") || "").trim().slice(0, 40);
       if (term.length < 2) return fail(400, "BAD_REQUEST", "Type at least 2 letters.");
-      const r = await cached("stations", term.toLowerCase(), async () => {
-        return (await upstream("/api/v1/trains/stations", { q: term })).data || [];
-      });
+      const r = await cached("stations", term.toLowerCase(), async () => (await upstream("/api/v1/trains/stations", { q: term })).data || []);
       return json({ ok: true, data: r.data, cachedAt: r.cachedAt });
     }
 
@@ -117,29 +138,45 @@ export default async (req, context) => {
       return json({ ok: true, data: r.data, cachedAt: r.cachedAt });
     }
 
+    if (route === "seats") {
+      const train = q.get("train") || "", from = (q.get("from") || "").toUpperCase(), to = (q.get("to") || "").toUpperCase();
+      const date = q.get("date") || "", quota = (q.get("quota") || "GN").toUpperCase();
+      const wanted = (q.get("classes") || "").toUpperCase().split(",").filter((c) => CLASSES.has(c));
+      if (!TRAIN.test(train) || !CODE.test(from) || !CODE.test(to) || !ISO.test(date) || !QUOTAS.has(quota)) return fail(400, "BAD_REQUEST", "Check the train, stations and date.");
+      let fares = {}, carried = [], at = 0;
+      try {
+        const f = await getFare(train, from, to, quota);
+        fares = f.data.fares || {}; carried = [...new Set([...(f.data.classes || []), ...Object.keys(fares)])].filter((c) => CLASSES.has(c)); at = f.cachedAt;
+      } catch (e) {
+        if (e instanceof Upstream && BLOCKING.has(e.code)) throw e;
+      }
+      let cls = carried.length ? carried : (wanted.length ? wanted.filter((c) => ["1A", "2A", "3A", "CC", "SL"].includes(c)) : ["SL", "3A", "2A", "1A"]);
+      if (wanted.length) cls = cls.filter((c) => wanted.includes(c));
+      const seats = await Promise.all(cls.map(async (c) => {
+        try {
+          const a = await getAvailability(train, from, to, date, c, quota);
+          at = Math.max(at, a.cachedAt);
+          return { class: c, status: a.data.status, fare: fares[c] ?? null };
+        } catch (e) {
+          if (e instanceof Upstream && BLOCKING.has(e.code)) throw e;
+          return { class: c, status: null, fare: fares[c] ?? null, error: (e && e.code) || "ERROR" };
+        }
+      }));
+      return json({ ok: true, data: { fares, classes: cls, seats, known: carried.length > 0 }, cachedAt: at });
+    }
+
     if (route === "availability") {
       const train = q.get("train") || "", from = (q.get("from") || "").toUpperCase(), to = (q.get("to") || "").toUpperCase();
       const date = q.get("date") || "", cls = (q.get("class") || "3A").toUpperCase(), quota = (q.get("quota") || "GN").toUpperCase();
       if (!TRAIN.test(train) || !CODE.test(from) || !CODE.test(to) || !ISO.test(date) || !CLASSES.has(cls) || !QUOTAS.has(quota)) return fail(400, "BAD_REQUEST", "Check the train, stations, date and class.");
-      const r = await cached("availability", [train, from, to, date, cls, quota].join("-"), async () => {
-        const b = await upstream("/api/v1/trains/" + train + "/availability", { from, to, date: toDMY(date), class: cls, quota });
-        const list = Array.isArray(b.availability) ? b.availability : (b.data && b.data.availability) || [];
-        const day = list.find((a) => a.date === date || a.date === toDMY(date)) || null;
-        return { status: day ? day.status : null, days: list.slice(0, 6), trainName: b.trainName || null };
-      });
+      const r = await getAvailability(train, from, to, date, cls, quota);
       return json({ ok: true, data: r.data, cachedAt: r.cachedAt });
     }
 
     if (route === "fare") {
       const train = q.get("train") || "", from = (q.get("from") || "").toUpperCase(), to = (q.get("to") || "").toUpperCase(), quota = (q.get("quota") || "GN").toUpperCase();
       if (!TRAIN.test(train) || !CODE.test(from) || !CODE.test(to) || !QUOTAS.has(quota)) return fail(400, "BAD_REQUEST", "Check the train and stations.");
-      const r = await cached("fare", [train, from, to, quota].join("-"), async () => {
-        const b = await upstream("/api/v1/trains/" + train + "/fare", { from, to, class: "all", quota });
-        const fares = {};
-        (b.fares || (b.data && b.data.fares) || []).forEach((f) => { if (f && f.class) fares[f.class] = f.totalFare ?? (f.breakup && f.breakup.total) ?? null; });
-        const classes = (b.availableClasses || []).map((c) => c.code || c).filter(Boolean);
-        return { fares, classes };
-      });
+      const r = await getFare(train, from, to, quota);
       return json({ ok: true, data: r.data, cachedAt: r.cachedAt });
     }
 
