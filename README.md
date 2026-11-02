@@ -2,6 +2,8 @@
 
 Live train seat status and confirmation chance for every train in your time window.
 
+Live at https://abhirail-app.netlify.app
+
 ## How it works
 
 - `public/` is the website: one page, the logo, app icons and an offline shell.
