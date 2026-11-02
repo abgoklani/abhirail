@@ -658,8 +658,12 @@ function runsOn(item,date){
   const rd=pickField(item,["runningDays","runsOn","running_days"]); if(rd==null) return true;
   const offset=Number(pickField(item,["fromStationDayOffset","dayOffset"])||0);
   const originDow=weekdayMon0(addDays(date,-offset));
+  const NAMES=["MON","TUE","WED","THU","FRI","SAT","SUN"];
   if(typeof rd==="string" && /^[01YN]{7}$/i.test(rd)){ const ch=rd[originDow].toUpperCase(); return ch==="1"||ch==="Y"; }
   if(Array.isArray(rd) && rd.length===7 && rd.every(x=>typeof x==="boolean"||x===0||x===1)) return !!rd[originDow];
+  const list=(Array.isArray(rd)? rd : String(rd).split(/[^A-Za-z]+/)).map(x=>String(x).slice(0,3).toUpperCase()).filter(Boolean);
+  if(list.length && list.every(x=>NAMES.includes(x))) return list.includes(NAMES[originDow]);
+  if(list.length===1 && /^(DAILY|ALL)/.test(list[0])) return true;
   return true;
 }
 function mapTrain(item,date){
@@ -742,9 +746,12 @@ async function checkSeats(trains){
   await pool(trains,3,async(t)=>{
     if(blocking) return;
     const cls=classesToCheck(t);
-    if(!cls.length){ setRows(t.no,[]); done++; return; }
     let fares=t.fares||{}, at=0, liveFound=false, errText=null;
-    try{ const fr=await api("fare",{train:t.no,from:t.fromCode,to:t.toCode,quota:state.ctx.quota}); fares=Object.assign({},fares,fr.data.fares||{}); at=Math.max(at,(fr.cachedAt||0)*1000); }catch(err){ if(["NO_KEY","UNAUTHORIZED","INSUFFICIENT_CREDITS"].includes(err.code)) blocking=err; }
+    try{ const fr=await api("fare",{train:t.no,from:t.fromCode,to:t.toCode,quota:state.ctx.quota}); fares=Object.assign({},fares,fr.data.fares||{}); at=Math.max(at,(fr.cachedAt||0)*1000);
+      const carried=[...(fr.data.classes||[]),...Object.keys(fr.data.fares||{})].map(c=>String(c).toUpperCase());
+      if(carried.length && !(t.classes&&t.classes.length)){ t.classes=[...new Set(carried)]; cls.splice(0,cls.length,...classesToCheck(t)); }
+    }catch(err){ if(["NO_KEY","UNAUTHORIZED","INSUFFICIENT_CREDITS"].includes(err.code)) blocking=err; }
+    if(!cls.length){ setRows(t.no,[]); done++; progress(true,"Checked "+done+" of "+total+" trains",0.25+0.75*done/total); render(); return; }
     const board=[];
     for(const c of cls){
       if(blocking) break;
