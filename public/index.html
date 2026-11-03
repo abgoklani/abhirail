@@ -556,7 +556,7 @@ async function api(path, params){
   const u = new URL("/api/" + path, location.origin);
   Object.entries(params||{}).forEach(([k,v])=>{ if(v!=null) u.searchParams.set(k,v); });
   let res, body=null;
-  try{ res = await fetch(u, {headers:{accept:"application/json"}}); }catch(e){ const er=new Error("offline"); er.code="OFFLINE"; throw er; }
+  try{ res = await fetch(u, {headers:{accept:"application/json"}, signal: AbortSignal.timeout ? AbortSignal.timeout(28000) : undefined}); }catch(e){ const er=new Error(e && (e.name==="TimeoutError"||e.name==="AbortError") ? "timeout" : "offline"); er.code=(e && (e.name==="TimeoutError"||e.name==="AbortError")) ? "TIMEOUT" : (navigator.onLine===false ? "OFFLINE" : "TIMEOUT"); throw er; }
   try{ body = await res.json(); }catch(e){}
   if(state.debug){ state.debugLog.unshift({at:new Date().toLocaleTimeString(), path:u.pathname+u.search, status:res.status, body}); state.debugLog=state.debugLog.slice(0,30); renderDebug(); }
   if(!res.ok || !body || body.ok===false){ if(body && body.retryable && res.status===503){ await sleep(900); return api(path, params); } throw apiError(res.status, body); }
@@ -573,6 +573,7 @@ function errCopy(err){
     case "UPSTREAM_DOWN": case "SERVICE_UNAVAILABLE": return {title:"Railway data service is not responding", text:"Wait a minute and search again."};
     case "NOT_FOUND": return {title:"Not found", text:(err.message||"No data for this train or station.")};
     case "OFFLINE": return {title:"You're offline", text:"Check your internet connection and search again."};
+    case "TIMEOUT": case "UPSTREAM_ERROR": return {title:"Railway data is slow right now", text:"Some trains took too long. Tap Retry in a minute."};
     case "BAD_REQUEST": return {title:"Check your search", text:(err.message||"Some details are missing.")};
     default: return {title:"Something went wrong", text:(err && err.message) || "Try the search again."};
   }
@@ -658,7 +659,7 @@ function rowsFromBoard(t,board,checkedAt,alts){
   const list=(board&&board.length)? board : (t.classes||[]).map(c=>({classCode:c,status:null,fare:(t.fares||{})[c]}));
   list.forEach(b=>{
     if(want && !want.includes(b.classCode)) return;
-    const st = b.status==null ? {kind:"na",pct:null,label: t.noLive? "Check on IRCTC" : (checkedAt? "No seat data" : "Not checked yet")} : readStatus(b.status);
+    const st = b.status==null ? {kind:"na",pct:null,label: t.noLive? "Check on IRCTC" : (checkedAt? "No seat data" : (state.searching? "Checking…" : "Not checked yet"))} : readStatus(b.status);
     const alt = pickAlt(alts,b.classCode,st);
     out.push(Object.assign({},t,{cls:b.classCode,raw:b.status,st,fare:b.fare!=null?b.fare:((t.fares||{})[b.classCode]??null),checkedAt,alt}));
   });
