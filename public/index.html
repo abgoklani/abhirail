@@ -720,7 +720,7 @@ async function search(){
   if(date<todayIso){ notice("warn","That date has passed","Pick today or a later date."); return; }
   state.searching=true; $("go").disabled=true; $("go").textContent="Searching…";
   state.example=false; state.rows=[]; state.pending=[]; hideStale();
-  $("fromSugg").hidden=true; $("toSugg").hidden=true; state.queueRun=(state.queueRun||0)+1; state.queue=[];
+  $("fromSugg").hidden=true; $("toSugg").hidden=true; state.queueRun=(state.queueRun||0)+1; state.queue=[]; state.queueBusy=false; state.queueActive=new Set(); state.queueHeld=new Set();
   saveForm(); render();
   try{
     progress(true,"Finding stations…",0.05);
@@ -778,75 +778,105 @@ async function checkOne(t,want){
   const fares=Object.assign({},t.fares||{},d.fares||{});
   const seats=d.seats||[];
   const tt=Object.assign({},t,{fares,classes:d.classes&&d.classes.length?d.classes:t.classes});
+  const isNA=x=>x.error==="UNAVAILABLE"||x.error==="NOT_FOUND";
   const limited=seats.filter(x=>x.error==="RATE_LIMIT_EXCEEDED"||x.error==="LIMIT");
-  const failed=seats.filter(x=>x.error && x.error!=="NOT_FOUND");
-  const attempted=seats.filter(x=>x.error!=="TIMEOUT").length;
-  if(t.probe && !seats.some(x=>x.status) && !failed.length){ setRows(t.no,rowsFromBoard(Object.assign({},t,{noLive:true}),null,null,null)); return {attempted,limited:0,failed:0}; }
-  if(!seats.length){ setRows(t.no, d.known? [] : rowsFromBoard(tt,null,at,null)); return {attempted,limited:0,failed:0}; }
+  const failed=seats.filter(x=>x.error && !isNA(x));
+  const na=new Set(seats.filter(isNA).map(x=>x.class));
+  const out={limited:limited.length,failed:failed.length-limited.length,retryCls:failed.map(x=>x.class),retryAfter:d.retryAfter||null};
+  if(!seats.some(x=>x.status) && !failed.length && (t.probe || seats.length)){ setRows(t.no,rowsFromBoard(Object.assign({},(t.probe||!d.known)?t:tt,{noLive:true}),null,null,null)); return out; }
+  if(!seats.length){ setRows(t.no, d.known? [] : rowsFromBoard(tt,null,at,null)); return out; }
   const prev=new Map(state.rows.filter(r0=>r0.no===t.no && r0.st && r0.st.pct!=null).map(r0=>[r0.cls,r0]));
   let rows=rowsFromBoard(tt,seats.map(x=>({classCode:x.class,status:x.status,fare:x.fare??fares[x.class]??null})),at,null);
+  rows=rows.map(rw=> na.has(rw.cls)? Object.assign(rw,{st:{kind:"na",pct:null,label:"Check on IRCTC"},checkedAt:null}) : rw);
   if(failed.length){
     const fs=new Set(failed.map(x=>x.class));
     rows=rows.map(rw=>{ if(!fs.has(rw.cls)) return rw; const keep=prev.get(rw.cls); if(keep) return keep;
-      return Object.assign(rw,{st:{kind:"na",pct:null,label:limited.length?"In queue":"Couldn't check"},checkedAt:null}); });
-    if(!limited.length) rows=rows.map(rw=>Object.assign(rw,{errText:failed.length===seats.length?"Seats couldn't be checked":"Some classes couldn't be checked",retryable:true}));
+      return Object.assign(rw,{st:{kind:"na",pct:null,label:"In queue"},checkedAt:null}); });
   }
   setRows(t.no,rows);
   if(at) state.ctx.checkedAt=Math.max(state.ctx.checkedAt||0,at);
-  return {attempted,limited:limited.length,failed:failed.length-limited.length,limitedClasses:limited.map(x=>x.class)};
+  return out;
 }
-const pace={stamps:[],cooldownUntil:0};
-function tokensFree(){ const now=Date.now(); pace.stamps=pace.stamps.filter(x=>now-x<60000); return Math.max(0,(state.seatsPerMinute||9)-pace.stamps.length); }
+/* Seat checks are paced to the railway data limit. The pace adapts: it slows down when
+   the railway data refuses a check and speeds back up after a run of successful ones. */
+const pace={next:0,cooldownUntil:0,ok:0};
+const LIMIT_TRIES=10, FAIL_TRIES=3, WORKERS=3;
+function maxRate(){ return state.seatsPerMinute||9; }
+function minRate(){ return Math.max(6,Math.round(maxRate()/3)); }
+function rate(){ return Math.max(minRate(),Math.min(state.rateNow||maxRate(), maxRate())); }
+function setRate(v){ state.rateNow=Math.max(minRate(),Math.min(maxRate(),v)); try{ localStorage.setItem("abhirail-rate",JSON.stringify({v:state.rateNow,max:maxRate(),at:Date.now()})); }catch(e){} }
+function loadRate(){ try{ const o=JSON.parse(localStorage.getItem("abhirail-rate")||"null"); if(o && o.max===maxRate() && Date.now()-o.at<6*3600e3) state.rateNow=o.v; }catch(e){} }
+function costOf(t){
+  if(t.retryCls && t.retryCls.length) return t.retryCls.length;
+  const known=state.rows.filter(r0=>r0.no===t.no && /^[0-9A-Z]{2}$/.test(r0.cls)).map(r0=>r0.cls);
+  return (known.length? known : classesToCheck(t)).length || 1;
+}
+/* Checks are spaced evenly (no bursts), so they stay under any per-second or per-minute window. */
 async function waitForTokens(k,run,label){
-  k=Math.max(1,Math.min(k,state.seatsPerMinute||9));
+  k=Math.max(1,k);
   while(run===state.queueRun){
     const now=Date.now();
-    if(now<pace.cooldownUntil){ setQueueNote(label,Math.ceil((pace.cooldownUntil-now)/1000)); await sleep(1000); continue; }
-    if(tokensFree()>=k){ for(let i=0;i<k;i++) pace.stamps.push(Date.now()); return true; }
-    const wait=Math.max(500,60000-(Date.now()-pace.stamps[0]));
-    setQueueNote(label,Math.ceil(wait/1000)); await sleep(Math.min(wait,1000));
+    const start=Math.max(pace.next,pace.cooldownUntil);
+    if(start<=now){ pace.next=Math.max(now,pace.next)+k*60000/rate(); return true; }
+    setQueueNote(label(),Math.ceil((start-now)/1000)); await sleep(Math.min(start-now,1000));
   }
   return false;
 }
+function remainingChecks(){ return (state.queue||[]).reduce((n,t)=>n+costOf(t),0); }
 function setQueueNote(label,secs){
-  const q=state.queue? state.queue.length : 0;
-  const perMin=state.seatsPerMinute||9;
-  const etaMin=Math.ceil(((q+1)*2.5)/perMin);
-  progress(true,(label?label+" · ":"")+"Railway data allows "+perMin+" seat checks a minute. Next check in "+secs+"s"+(q?" · about "+etaMin+" min for the remaining "+q+" trains":""),null);
+  const left=remainingChecks(); const perMin=rate();
+  const eta=left? Math.max(1,Math.ceil(left/perMin)) : 0;
+  progress(true,label+" · Railway data allows about "+perMin+" seat checks a minute"+(secs>3?" · next in "+secs+"s":"")+(eta?" · about "+eta+" min left":""),null);
 }
-function queuedSet(){ return new Set((state.queue||[]).map(t=>t.no).concat(state.queueActive?[state.queueActive]:[])); }
+function queuedSet(){ return new Set((state.queue||[]).map(t=>t.no).concat([...(state.queueHeld||[])],[...(state.queueActive||[])])); }
+function isChecking(no){ return !!(state.queueActive && state.queueActive.has(no)); }
 async function checkSeats(trains){
   const run=(state.queueRun||0)+1; state.queueRun=run;
   const want=classFilter();
-  state.queue=trains.slice(); state.queueActive=null; state.queueTries={};
+  state.queue=trains.map(t=>Object.assign({},t,{retryCls:null})); state.queueActive=new Set(); state.queueHeld=new Set(); state.queueTries={}; state.queueBusy=true;
+  if(!state.rateNow) loadRate();
   const total=trains.length; let done=0; let blocking=null;
+  const label=()=>"Checked "+done+" of "+total+" trains";
   render();
-  while(state.queue.length && run===state.queueRun){
-    const t=state.queue.shift(); state.queueActive=t.no;
-    const known=state.rows.filter(r0=>r0.no===t.no && /^[0-9A-Z]{2}$/.test(r0.cls)).map(r0=>r0.cls);
-    const k=(known.length? known : classesToCheck(t)).length || 1;
-    if(!(await waitForTokens(k,run,"Checked "+done+" of "+total))) break;
-    progress(true,"Checking "+t.no+" · "+done+" of "+total+" done",0.2+0.8*done/total);
-    try{
-      const res=await checkOne(t,want);
-      if(res.limited){
-        pace.cooldownUntil=Date.now()+30000;
-        state.queueTries[t.no]=(state.queueTries[t.no]||0)+1;
-        if(state.queueTries[t.no]<=4) state.queue.push(t); else { done++; markRetry(t.no); }
-      } else {
-        done++;
-        if(res.failed){ state.queueTries[t.no]=(state.queueTries[t.no]||0)+1; if(state.queueTries[t.no]<=2){ state.queue.push(t); done--; } }
+  const requeue=(t,limit,front)=>{ const n=(state.queueTries[t.no]=(state.queueTries[t.no]||0)+1); if(n<=limit){ front? state.queue.unshift(t) : state.queue.push(t); return true; } return false; };
+  const worker=async()=>{
+    while(state.queue.length && run===state.queueRun && !blocking){
+      const t=state.queue.shift();
+      state.queueHeld.add(t.no);
+      const ok=await waitForTokens(costOf(t),run,label);
+      state.queueHeld.delete(t.no);
+      if(!ok || blocking){ if(ok===false) return; state.queue.unshift(t); return; }
+      state.queueActive.add(t.no); render();
+      progress(true,"Checking seats · "+label(),0.2+0.8*done/total);
+      try{
+        const res=await checkOne(t,want);
+        if(run!==state.queueRun) return;
+        if(res.limited){
+          setRate(Math.round(rate()*0.85)); pace.ok=0;
+          pace.cooldownUntil=Math.max(pace.cooldownUntil,Date.now()+1000*Math.min(20,Math.max(4,res.retryAfter||8)));
+          t.retryCls=res.retryCls;
+          if(!requeue(t,LIMIT_TRIES,true)){ done++; markRetry(t.no); }
+        } else if(res.failed){
+          t.retryCls=res.retryCls;
+          if(!requeue(t,FAIL_TRIES,false)){ done++; markRetry(t.no); }
+        } else {
+          done++; pace.ok+=costOf(Object.assign({},t,{retryCls:null}));
+          if(pace.ok>=9 && rate()<maxRate()){ setRate(rate()+1); pace.ok=0; }
+        }
+      }catch(err){
+        if(run!==state.queueRun) return;
+        if(["NO_KEY","UNAUTHORIZED","INVALID_API_KEY","API_KEY_EXPIRED","INSUFFICIENT_CREDITS"].includes(err.code)){ blocking=err; return; }
+        if(err.code==="LIMIT"||err.code==="RATE_LIMIT_EXCEEDED"){ pace.cooldownUntil=Math.max(pace.cooldownUntil,Date.now()+8000); if(!requeue(t,LIMIT_TRIES,true)){ done++; markRetry(t.no); } }
+        else if(!requeue(t,FAIL_TRIES,false)){ done++; markRetry(t.no,errCopy(err).title); }
+        await sleep(1200);
+      }finally{
+        state.queueActive.delete(t.no); if(run===state.queueRun) render();
       }
-    }catch(err){
-      if(["NO_KEY","UNAUTHORIZED","INSUFFICIENT_CREDITS"].includes(err.code)){ blocking=err; break; }
-      state.queueTries[t.no]=(state.queueTries[t.no]||0)+1;
-      if(state.queueTries[t.no]<=2) state.queue.push(t); else { done++; markRetry(t.no,errCopy(err).title); }
-      await sleep(1500);
     }
-    state.queueActive=null; render();
-  }
+  };
+  await Promise.all(Array.from({length:WORKERS},worker));
   if(run!==state.queueRun) return;
-  state.queue=[]; state.queueActive=null;
+  state.queue=[]; state.queueActive=new Set(); state.queueHeld=new Set(); state.queueBusy=false;
   if(blocking){ const c=errCopy(blocking); notice("bad",c.title,c.text); }
   progress(false); render();
 }
@@ -863,7 +893,7 @@ async function retryTrains(nos){
   const seen=new Set(); const list=[];
   state.rows.forEach(r0=>{ if(nos.includes(r0.no)&&!seen.has(r0.no)){ seen.add(r0.no); list.push(Object.assign({},r0,{st:undefined,errText:undefined,retryable:undefined})); } });
   state.rows=state.rows.map(r0=>nos.includes(r0.no)?Object.assign(r0,{errText:undefined,retryable:undefined}):r0);
-  if(state.queue && state.queue.length){ list.forEach(t=>{ if(!state.queue.some(q=>q.no===t.no)) state.queue.unshift(t); }); render(); return; }
+  if(state.queueBusy && state.queue){ list.forEach(t=>{ if(!state.queue.some(q=>q.no===t.no)) state.queue.unshift(t); }); render(); return; }
   clearNotices(); checkSeats(list);
 }
 function setRows(no,newRows){ const i=state.rows.findIndex(r=>r.no===no); state.rows=state.rows.filter(r=>r.no!==no); if(i<0) state.rows.push(...newRows); else state.rows.splice(Math.min(i,state.rows.length),0,...newRows); }
@@ -941,7 +971,7 @@ function render(){
     const tiles=g.tiles.map(t=>{
       const p=t.st.pct; const isBest = g.best && t===g.best && p!=null && p>0 && g.tiles.length>1;
       const k = p==null? "na" : (p===100?"ok":(p>=60?"good":(p>=35?"warn":"bad")));
-      const qlabel = (p==null && qs.has(g.no) && !(t.st && t.st.label==="Couldn't check")) ? (state.queueActive===g.no?"Checking…":"In queue") : null;
+      const qlabel = (p==null && qs.has(g.no) && !(t.st && t.st.label==="Couldn't check")) ? (isChecking(g.no)?"Checking…":"In queue") : null;
       const wide = /\//.test(t.cls) ? " wide" : "";
       return '<div class="ct k-'+k+(isBest?" best":"")+wide+'" title="'+esc(t.raw||t.st.label)+'">'+
         '<div class="ct-h"><span class="cls">'+esc(t.cls)+'</span>'+(isBest?'<span class="besttag">Best</span>':"")+'</div>'+
@@ -968,7 +998,7 @@ function render(){
       '</div>'+
       '<div class="tc-classes">'+tiles+'</div>'+
       (notes.length?'<div class="tc-notes">'+notes.join("")+'</div>':"")+
-      '<div class="tc-foot"><span class="sub">'+(g.checkedAt?"Checked "+esc(ago(g.checkedAt)):(g.source==="new"?"Not in live data yet":(qs.has(g.no)&&state.queueActive!==g.no?'<button type="button" class="linkbtn chk" data-checknow="'+esc(g.no)+'">Check this train next</button>':"")))+'</span>'+
+      '<div class="tc-foot"><span class="sub">'+(g.checkedAt?"Checked "+esc(ago(g.checkedAt)):(g.source==="new"?"Not in live data yet":(qs.has(g.no)&&!isChecking(g.no)?'<button type="button" class="linkbtn chk" data-checknow="'+esc(g.no)+'">Check this train next</button>':"")))+'</span>'+
         '<span class="links"><a href="'+IRCTC+'" target="_blank" rel="noopener">Book on IRCTC</a>'+(g.source!=="new"?'<a href="https://www.railroute.in/train/'+encodeURIComponent(g.no)+'" target="_blank" rel="noopener">Train details</a>':"")+'</span></div>';
     box.appendChild(card);
   });

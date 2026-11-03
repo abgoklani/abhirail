@@ -41,6 +41,9 @@ const CLASSES = new Set(["1A", "2A", "3A", "3E", "CC", "EC", "SL", "2S", "FC", "
 const QUOTAS = new Set(["GN", "TQ", "PT", "SS", "LD"]);
 const BLOCKING = new Set(["NO_KEY", "UNAUTHORIZED", "INVALID_API_KEY", "API_KEY_EXPIRED", "MISSING_API_KEY", "INSUFFICIENT_CREDITS"]);
 const toDMY = (iso) => iso.split("-").reverse().join("-");
+// Answers that mean "irctc.dev has no live data for this", not "try again"
+const UNAVAILABLE = new Set(["SEAT_AVAILABILITY_ERROR", "NOT_FOUND", "TRAIN_NOT_FOUND", "CLASS_NOT_AVAILABLE", "INVALID_CLASS", "NO_AVAILABILITY"]);
+let limitSeen = null;
 
 class Upstream extends Error {
   constructor(status, code, message) { super(message); this.status = status; this.code = code; }
@@ -53,15 +56,16 @@ async function cached(kind, key, loader) {
   let hit = null;
   try { hit = await cache.get(k, { type: "json" }); } catch {}
   if (hit && hit.exp > now) {
-    if (hit.notFound) throw new Upstream(404, "NOT_FOUND", hit.message || "Not found.");
+    if (hit.notFound) throw new Upstream(404, hit.code || "NOT_FOUND", hit.message || "Not found.");
     return { data: hit.data, cachedAt: hit.at };
   }
   let data;
   try {
     data = await loader();
   } catch (e) {
-    if (e instanceof Upstream && e.status === 404) {
-      try { await cache.setJSON(k, { notFound: true, message: e.message, at: now, exp: now + 6 * 3600 }); } catch {}
+    if (e instanceof Upstream && (e.status === 404 || UNAVAILABLE.has(e.code))) {
+      const ttl = e.status === 404 ? 6 * 3600 : 20 * 60;
+      try { await cache.setJSON(k, { notFound: true, code: e.code, message: e.message, at: now, exp: now + ttl }); } catch {}
     }
     throw e;
   }
@@ -85,6 +89,11 @@ async function upstream(path, params, deadline, noRetry429) {
       if (attempt === 0 && left() > 4000) { await new Promise((r) => setTimeout(r, 400)); continue; }
       throw new Upstream(504, "TIMEOUT", "The railway data service is slow right now.");
     }
+    if (res.status === 429 || res.headers.get("x-ratelimit-limit") || res.headers.get("ratelimit-limit")) {
+      const h = {};
+      for (const [hk, hv] of res.headers) if (/ratelimit|retry-after/i.test(hk)) h[hk] = hv;
+      if (res.status === 429 || !limitSeen || limitSeen.status !== 429 || Date.now() - limitSeen.at > 120000) limitSeen = { at: Date.now(), status: res.status, path: path.replace(/\d{5}/, "#"), headers: h };
+    }
     if (res.status === 429 && attempt < 2 && !noRetry429) {
       const ra = Number(res.headers.get("retry-after"));
       const wait = Math.min(Number.isFinite(ra) && ra > 0 ? ra * 1000 : 1000 * (attempt + 1) + Math.random() * 500, 3000);
@@ -99,7 +108,9 @@ async function upstream(path, params, deadline, noRetry429) {
   try { body = await res.json(); } catch {}
   if (!res.ok || (body && body.success === false)) {
     const code = (body && body.code) || ({ 401: "UNAUTHORIZED", 402: "INSUFFICIENT_CREDITS", 404: "NOT_FOUND", 429: "RATE_LIMIT_EXCEEDED" }[res.status]) || "UPSTREAM_ERROR";
-    throw new Upstream(res.status || 502, code, (body && (body.message || body.error)) || "The railway data service returned an error.");
+    const err = new Upstream(res.status || 502, code, (body && (body.message || body.error)) || "The railway data service returned an error.");
+    if (res.status === 429) { err.retryAfter = Number(res.headers.get("retry-after")) || null; if (limitSeen) limitSeen.message = err.message; }
+    throw err;
   }
   return body;
 }
@@ -134,7 +145,7 @@ export default async (req) => {
   const route = url.pathname.replace(/^\/api\/?/, "").replace(/\/$/, "");
   const q = url.searchParams;
   if (req.method !== "GET") return fail(405, "METHOD", "Only GET is supported.");
-  if (route === "health") return json({ ok: true, keySet: Boolean(env("IRCTC_DEV_API_KEY")), seatsPerMinute: Number(env("SEATS_PER_MINUTE")) || 9 });
+  if (route === "health") return json({ ok: true, keySet: Boolean(env("IRCTC_DEV_API_KEY")), seatsPerMinute: Number(env("SEATS_PER_MINUTE")) || 9, limitSeen });
 
   try {
     if (route === "stations") {
@@ -170,7 +181,7 @@ export default async (req) => {
       let cls = carried.length ? carried : (wanted.length ? wanted.filter((c) => ["1A", "2A", "3A", "CC", "SL"].includes(c)) : ["SL", "3A", "2A", "1A"]);
       if (wanted.length) cls = cls.filter((c) => wanted.includes(c));
       const seats = new Array(cls.length);
-      let next = 0;
+      let next = 0, retryAfter = 0;
       const worker = async () => {
         while (next < cls.length) {
           const i = next++, c = cls[i];
@@ -181,12 +192,14 @@ export default async (req) => {
             seats[i] = { class: c, status: a.data.status, fare: fares[c] ?? null };
           } catch (e) {
             if (e instanceof Upstream && BLOCKING.has(e.code)) throw e;
-            seats[i] = { class: c, status: null, fare: fares[c] ?? null, error: (e && e.code) || "ERROR" };
+            if (e && e.retryAfter) retryAfter = Math.max(retryAfter, e.retryAfter);
+            const code = (e && e.code) || "ERROR";
+            seats[i] = { class: c, status: null, fare: fares[c] ?? null, error: UNAVAILABLE.has(code) ? "UNAVAILABLE" : code };
           }
         }
       };
       await Promise.all([worker(), worker(), worker()]);
-      return json({ ok: true, data: { fares, classes: cls, seats, known: carried.length > 0 }, cachedAt: at || null });
+      return json({ ok: true, data: { fares, classes: cls, seats, known: carried.length > 0, retryAfter: retryAfter || null }, cachedAt: at || null });
     }
 
     if (route === "availability") {
