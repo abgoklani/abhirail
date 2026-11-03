@@ -443,16 +443,15 @@ body.is-stale .board,body.is-stale .summary{opacity:.45;filter:grayscale(.4)}
       <div class="bk-cls" id="bkCls"></div>
       <div class="bk-rows" id="bkRows"></div>
       <div class="bk-act">
-        <a class="btn primary" id="bkOpen" href="https://www.irctc.co.in/nget/train-search" target="_blank" rel="noopener">Copy &amp; open IRCTC</a>
-        <button type="button" class="btn ghost" id="bkCopyAll">Copy all</button>
-        <button type="button" class="btn ghost" id="bkShare">Share</button>
+        <a class="btn primary" id="bkOpen" href="https://www.irctc.co.in/nget/train-search" target="_blank" rel="noopener">Open IRCTC</a>
+        <button type="button" class="btn ghost" id="bkShare">Share details</button>
       </div>
       <ol class="bk-steps">
         <li>Log in to IRCTC (website or Rail Connect app).</li>
-        <li>Type the <b>From</b> and <b>To</b> codes, pick the date, class and quota, then search.</li>
+        <li>In <b>From</b> and <b>To</b>, type the station code shown above (e.g. <b id="bkFromEg"></b>) and pick it from the list. Set the date, class and quota to match, then search.</li>
         <li>Find train <b id="bkNo"></b> and tap <b>Book Now</b>. Passengers can be picked from your IRCTC Master List.</li>
       </ol>
-      <p class="bk-note">IRCTC doesn't let other sites fill its booking form, so AbhiRail gives you the exact details to paste. Seat status can change before you book.</p>
+      <p class="bk-note">IRCTC doesn't let other sites fill its form, so use this as your checklist while you book. Share details sends it to family on WhatsApp. Seat status can change before you book.</p>
     </div>
   </div>
   <div class="toast" id="toast" hidden></div>
@@ -466,7 +465,7 @@ body.is-stale .board,body.is-stale .summary{opacity:.45;filter:grayscale(.4)}
   <div class="legend">
     <h2>How to read the chance</h2>
     <div><b>Available = 100%</b>A confirmed berth is open right now. Seats sell fast, so book soon. RAC means you can board and share a berth until one frees up.</div>
-    <div><b>Waitlist = estimate</b>The chance is a rule of thumb from the waitlist number: the lower the number, the higher the chance. It is not a measured prediction. Tatkal waitlists are marked down because they clear less often.</div>
+    <div><b>Waitlist = estimate</b>A rule of thumb, not a measured prediction. It starts from the waitlist number, then adjusts for the class (1A and 2A have few berths, so a WL 3 in 1A is a weaker bet than WL 3 in 3A), the waitlist type (RLWL, PQWL and Tatkal clear less often than GNWL) and how close the journey is.</div>
     <div><b>New trains</b>Trains launched in the last few weeks, such as the Vande Bharat Sleeper, may not be in the live data yet. They appear with a "New" tag and a link to check seats on IRCTC.</div>
   </div>
 </div>
@@ -554,17 +553,38 @@ async function pool(items,n,fn){ let i=0; const workers=Array.from({length:Math.
 
 /* ---------- seat status → chance ---------- */
 function wlPct(n){
-  if(n<=2) return 78; if(n<=5) return 75; if(n<=10) return 70; if(n<=15) return 65; if(n<=20) return 60;
-  if(n<=30) return 50; if(n<=50) return 40; if(n<=75) return 28; if(n<=100) return 20; if(n<=150) return 12; return 6;
+  // Smooth curve fitted to the old rule of thumb (WL 10 ≈ 70%, WL 30 ≈ 50%, WL 100 ≈ 20%), for a 3A general waitlist.
+  return Math.round(82/(1+Math.pow(Math.max(1,n)/38,1.3)));
 }
-function readStatus(raw){
+/* How fast a waitlist moves depends on how many berths the class has: one 1A coach (~18–24 berths)
+   frees far fewer berths than five or six 3A coaches, so the same WL number is a worse bet in 1A. */
+// Roughly: berths in the class (fewer berths, slower waitlist), softened because 1A/2A cancel a little more often.
+const CLASS_WL_FACTOR={"1A":6,"EC":4,"2A":2.5,"3E":1.3,"3A":1,"CC":0.8,"SL":0.6,"2S":0.5};
+/* Remote-location (RLWL), pooled (PQWL) and road-side (RSWL) waitlists draw on small quotas and clear less often than GNWL. */
+function wlTypeFactor(s){
+  if(/TQWL|CKWL|PTWL/.test(s)) return [0.5,"Tatkal waitlist"];
+  if(/RSWL|RQWL/.test(s)) return [0.6,"small-quota waitlist"];
+  if(/RLWL/.test(s)) return [0.75,"remote-location waitlist"];
+  if(/PQWL/.test(s)) return [0.8,"pooled-quota waitlist"];
+  return [1,"general waitlist"];
+}
+function daysLeft(iso){ if(!iso) return null; return Math.round((dateObj(iso)-dateObj(istToday()))/864e5); }
+function readStatus(raw,cls,date){
   const s=String(raw||"").toUpperCase().trim();
   if(!s) return {kind:"na",pct:null,label:"No data"};
   if(/^(AVAILABLE|AVL|CURR_AVBL)/.test(s)){ const m=s.match(/(\d+)/); return {kind:"ok",pct:100,label: m? ("Available · "+(+m[1])+" left") : "Available"}; }
   if(/REGRET|NOT ?AVAILABLE|TRAIN ?CANCEL|DEPARTED|CHART ?PREPARED|NOT ?BOOKABLE/.test(s)) return {kind:"bad",pct:0,label: /REGRET/.test(s)?"Full (regret)":"Not bookable"};
   if(/RAC/.test(s)){ const m=s.match(/RAC\s*(\d+)/); return {kind:"good",pct:90,label:"RAC"+(m?" "+(+m[1]):"")+" · can travel",est:true}; }
   const nums=[...s.matchAll(/(?:[A-Z]*WL)\s*(\d+)/g)].map(x=>+x[1]);
-  if(nums.length){ const n=Math.min(...nums); let p=wlPct(n); if(/TQWL|PTWL/.test(s)) p=Math.round(p*0.5); return {kind: p>=60?"good":(p>=35?"warn":"bad"), pct:p, label:"Waitlist "+n, est:true, wl:n}; }
+  if(nums.length){
+    const n=Math.min(...nums), cf=CLASS_WL_FACTOR[cls]||1, [tf,tname]=wlTypeFactor(s);
+    let p=wlPct(Math.max(1,Math.round(n*cf)))*tf;
+    const d=daysLeft(date);
+    if(d!=null){ if(d<=1) p*=0.6; else if(d<=3) p*=0.8; else if(d<=7) p*=0.92; }
+    p=Math.max(2,Math.round(p));
+    const why=[tname, cf>1?cls+" has few berths":null, d!=null&&d<=3?"little time left":null].filter(Boolean).join(", ");
+    return {kind: p>=60?"good":(p>=35?"warn":"bad"), pct:p, label:"Waitlist "+n, est:true, wl:n, why};
+  }
   return {kind:"na",pct:null,label:raw};
 }
 function chanceColor(p){ if(p==null) return "var(--line)"; if(p>=95) return "var(--ok)"; if(p>=60) return "var(--good)"; if(p>=35) return "var(--warn)"; return "var(--bad)"; }
@@ -735,7 +755,7 @@ function rowsFromBoard(t,board,checkedAt,alts){
   const list=(board&&board.length)? board : (t.classes||[]).map(c=>({classCode:c,status:null,fare:(t.fares||{})[c]}));
   list.forEach(b=>{
     if(want && !want.includes(b.classCode)) return;
-    const st = b.status==null ? {kind:"na",pct:null,label: t.noLive? "Check on IRCTC" : (checkedAt? "No seat data" : (state.searching? "Checking…" : "Not checked yet"))} : readStatus(b.status);
+    const st = b.status==null ? {kind:"na",pct:null,label: t.noLive? "Check on IRCTC" : (checkedAt? "No seat data" : (state.searching? "Checking…" : "Not checked yet"))} : readStatus(b.status,b.classCode,t.date);
     const alt = pickAlt(alts,b.classCode,st);
     out.push(Object.assign({},t,{cls:b.classCode,raw:b.status,st,fare:b.fare!=null?b.fare:((t.fares||{})[b.classCode]??null),checkedAt,alt}));
   });
@@ -1049,7 +1069,7 @@ function bookText(d){
     "Date: "+dmy(d.date)+" ("+fmtDate(d.date)+")",
     "Class: "+(t?(CLASS_LABEL[t.cls]||t.cls)+" ("+t.cls+")":"Any"),
     "Quota: "+(QUOTA_LABEL[d.quota]||d.quota)];
-  if(t && t.st && (t.st.pct!=null || t.raw)) lines.push("Seats: "+shortStatus(t.st)+(t.st.pct!=null?" · "+t.st.pct+"% chance":"")+(t.checkedAt?" (checked "+ago(t.checkedAt)+")":""));
+  if(t && t.st && (t.st.pct!=null || t.raw)) lines.push("Seats: "+(t.raw||shortStatus(t.st))+(t.st.pct!=null?" · about "+t.st.pct+"% chance":"")+(t.checkedAt?" (checked "+ago(t.checkedAt)+")":""));
   if(t && t.fare!=null) lines.push("Fare: "+fmtINR(t.fare)+" per adult");
   return lines.join("\n");
 }
@@ -1065,16 +1085,16 @@ function renderBook(){
   const d=bookDetails(); if(!d){ closeBook(); return; }
   const g=d.g, t=d.t;
   $("bkTitle").textContent=g.no+" · "+titleCase(g.name||"");
-  $("bkNo").textContent=g.no;
+  $("bkNo").textContent=g.no; $("bkFromEg").textContent=g.fromCode;
   $("bkCls").innerHTML=d.tiles.map(x=>'<button type="button" data-bkcls="'+esc(x.cls)+'" aria-pressed="'+(x.cls===bk.cls)+'">'+esc(x.cls)+'<small>'+esc(x.st&&x.st.pct!=null?x.st.pct+"%":shortStatus(x.st))+'</small></button>').join("");
   const row=(k,v,sub,copy)=>'<div class="bk-row"><div class="k">'+k+'</div><div class="v"><b>'+esc(v)+'</b>'+(sub?'<span>'+esc(sub)+'</span>':"")+'</div>'+(copy!=null?'<button type="button" data-copy="'+esc(copy)+'">Copy</button>':"")+'</div>';
   $("bkRows").innerHTML=
     row("From",g.fromCode,[titleCase(g.fromName||""),g.dep!=null?"departs "+fmtHM(g.dep):""].filter(Boolean).join(" · "),g.fromCode)+
     row("To",g.toCode,titleCase(g.toName||""),g.toCode)+
-    row("Date",dmy(d.date),fmtDate(d.date),dmy(d.date))+
+    row("Date",dmy(d.date),fmtDate(d.date),null)+
     row("Class",t?t.cls:"Any",t?(CLASS_LABEL[t.cls]||"")+(t.fare!=null?" · "+fmtINR(t.fare):""):"",null)+
     row("Quota",QUOTA_LABEL[d.quota]||d.quota,"",null)+
-    row("Train",g.no,t&&t.st?shortStatus(t.st)+(t.st.pct!=null?" · "+t.st.pct+"% chance":""):"",g.no);
+    row("Train",g.no,t&&t.st?shortStatus(t.st)+(t.st.pct!=null?" · "+t.st.pct+"% chance":"")+(t.st.why?" ("+t.st.why+")":""):"",null);
 }
 function toast(msg){ const el=$("toast"); el.textContent=msg; el.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>{ el.hidden=true; },1800); }
 function copyText(text){
@@ -1088,8 +1108,6 @@ $("bookSheet").addEventListener("click",e=>{
   const c=e.target.closest("[data-bkcls]"); if(c){ bk.cls=c.dataset.bkcls; renderBook(); return; }
   const cp=e.target.closest("[data-copy]"); if(cp){ toast(copyText(cp.dataset.copy)?"Copied "+cp.dataset.copy:"Couldn't copy"); return; }
 });
-$("bkCopyAll").onclick=()=>{ const d=bookDetails(); if(d) toast(copyText(bookText(d))?"Booking details copied":"Couldn't copy"); };
-$("bkOpen").addEventListener("click",()=>{ const d=bookDetails(); if(d) copyText(bookText(d)); });
 $("bkShare").onclick=async()=>{ const d=bookDetails(); if(!d) return; const text=bookText(d);
   if(navigator.share){ try{ await navigator.share({title:"Train "+d.g.no+" booking details",text}); return; }catch(e){ if(e&&e.name==="AbortError") return; } }
   toast(copyText(text)?"Copied. Paste it in WhatsApp":"Couldn't copy"); };
@@ -1116,7 +1134,8 @@ function restoreSession(){
   let sv=null; try{ sv=JSON.parse(localStorage.getItem(SESSION_KEY)||"null"); }catch(e){}
   if(!sv || sv.v!==1 || !sv.ctx || !Array.isArray(sv.rows) || !sv.rows.length) return null;
   if(Date.now()-sv.savedAt>12*3600e3 || sv.ctx.date<istToday()){ clearSession(); return null; }
-  state.ctx=sv.ctx; state.rows=sv.rows; state.pending=sv.pending||[];
+  state.ctx=sv.ctx; state.pending=sv.pending||[];
+  state.rows=sv.rows.map(r0=> r0.raw && /^[0-9A-Z]{2}$/.test(r0.cls) ? Object.assign(r0,{st:readStatus(r0.raw,r0.cls,r0.date)}) : r0);
   try{ $("date").value=sv.ctx.date; }catch(e){}
   return sv;
 }
