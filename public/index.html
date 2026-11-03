@@ -272,6 +272,36 @@ th{background:#111;position:sticky;top:0}
 }
 @media (prefers-reduced-motion: reduce){ .bar i{transition:none} }
 @media (max-width: 760px){ .summary{grid-template-columns:repeat(3,minmax(0,1fr))} .tile.best{grid-column:1/-1} }
+.linkbtn.book{color:var(--text,#fff);font-weight:600}
+.ct[data-book]{cursor:pointer}
+.sheet{position:fixed;inset:0;z-index:50;display:flex;align-items:flex-end;justify-content:center}
+.sheet[hidden]{display:none}
+.sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.66)}
+.sheet-p{position:relative;width:100%;max-width:520px;max-height:92vh;overflow:auto;background:#141414;border:1px solid #2a2a2a;border-bottom:0;border-radius:16px 16px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom));box-shadow:0 -20px 60px rgba(0,0,0,.6)}
+@media (min-width:700px){ .sheet{align-items:center} .sheet-p{border-radius:16px;border-bottom:1px solid #2a2a2a} }
+.sheet-h{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
+.sheet-h h3{margin:2px 0 0;font-size:18px;line-height:1.25}
+.sheet-x{background:none;border:0;color:var(--muted);font-size:28px;line-height:1;cursor:pointer;padding:0 4px}
+.bk-cls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.bk-cls button{border:1px solid #333;background:#1c1c1c;color:inherit;border-radius:999px;padding:6px 12px;font:600 13px var(--font-mono);cursor:pointer}
+.bk-cls button[aria-pressed="true"]{border-color:var(--accent,#e50914);background:#2a0d0f}
+.bk-cls small{font-weight:500;color:var(--muted);margin-left:6px}
+.bk-rows{display:flex;flex-direction:column;border:1px solid #262626;border-radius:12px;overflow:hidden}
+.bk-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid #222}
+.bk-row:first-child{border-top:0}
+.bk-row .k{width:62px;flex:none;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.bk-row .v{flex:1;min-width:0}
+.bk-row .v b{font:600 16px var(--font-mono)}
+.bk-row .v span{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bk-row button{flex:none;border:1px solid #333;background:#1c1c1c;color:inherit;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:600;cursor:pointer}
+.bk-act{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 8px}
+.bk-act .btn{flex:1;min-width:110px;justify-content:center;text-align:center}
+.bk-act .btn.primary{flex-basis:100%}
+.bk-act a.btn{text-decoration:none;display:inline-flex;align-items:center}
+.bk-steps{margin:10px 0 6px;padding-left:20px;font-size:13px;color:#cfcfcf;display:flex;flex-direction:column;gap:4px}
+.bk-note{font-size:12px;color:var(--muted);margin:6px 0 0}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:60;background:#f5f5f5;color:#111;font-weight:600;font-size:14px;padding:10px 16px;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.toast[hidden]{display:none}
 .addtrain{margin:14px 0 4px;border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:14px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between}
 .addtrain[hidden]{display:none}
 .addtrain .at-t{display:flex;flex-direction:column;gap:2px;min-width:220px;flex:1}
@@ -406,6 +436,26 @@ body.is-stale .board,body.is-stale .summary{opacity:.45;filter:grayscale(.4)}
 
   <div class="board" id="rows" aria-live="polite"></div>
   <div id="moreWrap"></div>
+  <div class="sheet" id="bookSheet" hidden>
+    <div class="sheet-bg" data-close="1"></div>
+    <div class="sheet-p" role="dialog" aria-modal="true" aria-labelledby="bkTitle">
+      <div class="sheet-h"><div><div class="tlabel">Book on IRCTC</div><h3 id="bkTitle"></h3></div><button type="button" class="sheet-x" data-close="1" aria-label="Close">×</button></div>
+      <div class="bk-cls" id="bkCls"></div>
+      <div class="bk-rows" id="bkRows"></div>
+      <div class="bk-act">
+        <a class="btn primary" id="bkOpen" href="https://www.irctc.co.in/nget/train-search" target="_blank" rel="noopener">Copy &amp; open IRCTC</a>
+        <button type="button" class="btn ghost" id="bkCopyAll">Copy all</button>
+        <button type="button" class="btn ghost" id="bkShare">Share</button>
+      </div>
+      <ol class="bk-steps">
+        <li>Log in to IRCTC (website or Rail Connect app).</li>
+        <li>Type the <b>From</b> and <b>To</b> codes, pick the date, class and quota, then search.</li>
+        <li>Find train <b id="bkNo"></b> and tap <b>Book Now</b>. Passengers can be picked from your IRCTC Master List.</li>
+      </ol>
+      <p class="bk-note">IRCTC doesn't let other sites fill its booking form, so AbhiRail gives you the exact details to paste. Seat status can change before you book.</p>
+    </div>
+  </div>
+  <div class="toast" id="toast" hidden></div>
   <form class="addtrain" id="addTrain" hidden>
     <div class="at-t"><b>Missing a train?</b><span>The railway data doesn't list every train. Add one by its number and AbhiRail checks its seats.</span></div>
     <div class="at-f"><input id="addTrainNo" inputmode="numeric" pattern="[0-9]*" maxlength="5" placeholder="Train no., e.g. 22913" aria-label="Train number" autocomplete="off"><button class="btn primary small" id="addTrainBtn" type="submit">Add &amp; check</button></div>
@@ -977,6 +1027,75 @@ async function addTrainByNumber(no){
   finally{ btn.disabled=false; btn.textContent="Add & check"; }
 }
 
+/* ---------- booking sheet ---------- */
+const CLASS_LABEL={"1A":"First AC","2A":"AC 2 Tier","3A":"AC 3 Tier","3E":"AC 3 Economy","CC":"AC Chair Car","EC":"Executive Chair Car","SL":"Sleeper","2S":"Second Sitting"};
+const QUOTA_LABEL={GN:"General",TQ:"Tatkal",PT:"Premium Tatkal",SS:"Senior Citizen",LD:"Ladies"};
+const bk={no:null,cls:null};
+function dmy(iso){ const [y,m,d]=iso.split("-"); return d+"/"+m+"/"+y; }
+function bookGroup(){ return groupTrains(state.rows).find(g=>g.no===bk.no)||null; }
+function bookDetails(){
+  const g=bookGroup(); if(!g||!state.ctx) return null;
+  const tiles=g.tiles.filter(t=>/^[0-9A-Z]{2}$/.test(t.cls));
+  const t=tiles.find(x=>x.cls===bk.cls)||null;
+  const quota=state.ctx.quota||"GN";
+  return {g,tiles,t,quota,date:g.date||state.ctx.date};
+}
+function bookText(d){
+  const g=d.g, t=d.t;
+  const lines=["AbhiRail · booking details",
+    "Train: "+g.no+" "+titleCase(g.name||""),
+    "From: "+g.fromCode+(g.fromName?" ("+titleCase(g.fromName)+")":"")+(g.dep!=null?" · dep "+fmtHM(g.dep):""),
+    "To: "+g.toCode+(g.toName?" ("+titleCase(g.toName)+")":""),
+    "Date: "+dmy(d.date)+" ("+fmtDate(d.date)+")",
+    "Class: "+(t?(CLASS_LABEL[t.cls]||t.cls)+" ("+t.cls+")":"Any"),
+    "Quota: "+(QUOTA_LABEL[d.quota]||d.quota)];
+  if(t && t.st && (t.st.pct!=null || t.raw)) lines.push("Seats: "+shortStatus(t.st)+(t.st.pct!=null?" · "+t.st.pct+"% chance":"")+(t.checkedAt?" (checked "+ago(t.checkedAt)+")":""));
+  if(t && t.fare!=null) lines.push("Fare: "+fmtINR(t.fare)+" per adult");
+  return lines.join("\n");
+}
+function titleCase(x){ return String(x).toLowerCase().replace(/\b([a-z])/g,(m,c)=>c.toUpperCase()); }
+function openBook(no,cls){
+  bk.no=no; const d0=(bk.cls=null,bookDetails()); if(!d0) return;
+  bk.cls = cls && d0.tiles.some(x=>x.cls===cls) ? cls : (d0.g.best? d0.g.best.cls : (d0.tiles[0]&&d0.tiles[0].cls));
+  renderBook(); $("bookSheet").hidden=false; document.body.style.overflow="hidden";
+  setTimeout(()=>{ const b=document.querySelector("#bkCls [aria-pressed=true]")||$("bkOpen"); b&&b.focus(); },30);
+}
+function closeBook(){ $("bookSheet").hidden=true; document.body.style.overflow=""; }
+function renderBook(){
+  const d=bookDetails(); if(!d){ closeBook(); return; }
+  const g=d.g, t=d.t;
+  $("bkTitle").textContent=g.no+" · "+titleCase(g.name||"");
+  $("bkNo").textContent=g.no;
+  $("bkCls").innerHTML=d.tiles.map(x=>'<button type="button" data-bkcls="'+esc(x.cls)+'" aria-pressed="'+(x.cls===bk.cls)+'">'+esc(x.cls)+'<small>'+esc(x.st&&x.st.pct!=null?x.st.pct+"%":shortStatus(x.st))+'</small></button>').join("");
+  const row=(k,v,sub,copy)=>'<div class="bk-row"><div class="k">'+k+'</div><div class="v"><b>'+esc(v)+'</b>'+(sub?'<span>'+esc(sub)+'</span>':"")+'</div>'+(copy!=null?'<button type="button" data-copy="'+esc(copy)+'">Copy</button>':"")+'</div>';
+  $("bkRows").innerHTML=
+    row("From",g.fromCode,[titleCase(g.fromName||""),g.dep!=null?"departs "+fmtHM(g.dep):""].filter(Boolean).join(" · "),g.fromCode)+
+    row("To",g.toCode,titleCase(g.toName||""),g.toCode)+
+    row("Date",dmy(d.date),fmtDate(d.date),dmy(d.date))+
+    row("Class",t?t.cls:"Any",t?(CLASS_LABEL[t.cls]||"")+(t.fare!=null?" · "+fmtINR(t.fare):""):"",null)+
+    row("Quota",QUOTA_LABEL[d.quota]||d.quota,"",null)+
+    row("Train",g.no,t&&t.st?shortStatus(t.st)+(t.st.pct!=null?" · "+t.st.pct+"% chance":""):"",g.no);
+}
+function toast(msg){ const el=$("toast"); el.textContent=msg; el.hidden=false; clearTimeout(toast.t); toast.t=setTimeout(()=>{ el.hidden=true; },1800); }
+function copyText(text){
+  let ok=false;
+  try{ const ta=document.createElement("textarea"); ta.value=text; ta.setAttribute("readonly",""); ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0,text.length); ok=document.execCommand("copy"); document.body.removeChild(ta); }catch(e){}
+  try{ if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).catch(()=>{}); ok=ok||!!navigator.clipboard; }catch(e){}
+  return ok;
+}
+$("bookSheet").addEventListener("click",e=>{
+  if(e.target.closest("[data-close]")){ closeBook(); return; }
+  const c=e.target.closest("[data-bkcls]"); if(c){ bk.cls=c.dataset.bkcls; renderBook(); return; }
+  const cp=e.target.closest("[data-copy]"); if(cp){ toast(copyText(cp.dataset.copy)?"Copied "+cp.dataset.copy:"Couldn't copy"); return; }
+});
+$("bkCopyAll").onclick=()=>{ const d=bookDetails(); if(d) toast(copyText(bookText(d))?"Booking details copied":"Couldn't copy"); };
+$("bkOpen").addEventListener("click",()=>{ const d=bookDetails(); if(d) copyText(bookText(d)); });
+$("bkShare").onclick=async()=>{ const d=bookDetails(); if(!d) return; const text=bookText(d);
+  if(navigator.share){ try{ await navigator.share({title:"Train "+d.g.no+" booking details",text}); return; }catch(e){ if(e&&e.name==="AbortError") return; } }
+  toast(copyText(text)?"Copied. Paste it in WhatsApp":"Couldn't copy"); };
+document.addEventListener("keydown",e=>{ if(e.key==="Escape" && !$("bookSheet").hidden) closeBook();
+  if((e.key==="Enter"||e.key===" ") && e.target.matches && e.target.matches(".ct[data-book]")){ e.preventDefault(); openBook(e.target.dataset.book,e.target.dataset.cls); } });
+
 /* ---------- keep the last search on this device ---------- */
 const SESSION_KEY="abhirail-session"; let sessionTimer=null;
 function sessionTodo(){
@@ -1079,7 +1198,7 @@ function render(){
       const k = p==null? "na" : (p===100?"ok":(p>=60?"good":(p>=35?"warn":"bad")));
       const qlabel = (p==null && qs.has(g.no) && !(t.st && t.st.label==="Couldn't check")) ? (isChecking(g.no)?"Checking…":"In queue") : null;
       const wide = /\//.test(t.cls) ? " wide" : "";
-      return '<div class="ct k-'+k+(isBest?" best":"")+wide+'" title="'+esc(t.raw||t.st.label)+'">'+
+      return '<div class="ct k-'+k+(isBest?" best":"")+wide+'" title="'+esc(t.raw||t.st.label)+'"'+(wide?'':' data-book="'+esc(g.no)+'" data-cls="'+esc(t.cls)+'" role="button" tabindex="0"')+'>'+
         '<div class="ct-h"><span class="cls">'+esc(t.cls)+'</span>'+(isBest?'<span class="besttag">Best</span>':"")+'</div>'+
         '<div class="ct-p">'+(p==null?"—":p+"%")+'</div>'+
         '<div class="track"><i style="width:'+(p||0)+'%;background:'+chanceColor(p)+'"></i></div>'+
@@ -1105,7 +1224,7 @@ function render(){
       '<div class="tc-classes">'+tiles+'</div>'+
       (notes.length?'<div class="tc-notes">'+notes.join("")+'</div>':"")+
       '<div class="tc-foot"><span class="sub">'+(g.checkedAt?"Checked "+esc(ago(g.checkedAt)):(g.source==="new"?"Not in live data yet":(qs.has(g.no)&&!isChecking(g.no)?'<button type="button" class="linkbtn chk" data-checknow="'+esc(g.no)+'">Check this train next</button>':"")))+'</span>'+
-        '<span class="links"><a href="'+IRCTC+'" target="_blank" rel="noopener">Book on IRCTC</a>'+(g.source!=="new"?'<a href="https://www.railroute.in/train/'+encodeURIComponent(g.no)+'" target="_blank" rel="noopener">Train details</a>':"")+'</span></div>';
+        '<span class="links"><button type="button" class="linkbtn book" data-book="'+esc(g.no)+'">Book on IRCTC</button>'+(g.source!=="new"?'<a href="https://www.railroute.in/train/'+encodeURIComponent(g.no)+'" target="_blank" rel="noopener">Train details</a>':"")+'</span></div>';
     box.appendChild(card);
   });
   renderSummary(sortRows(state.rows));
@@ -1214,6 +1333,7 @@ document.addEventListener("click",e=>{
   const rt=e.target.closest("[data-retry]"); if(rt){ retryTrains([rt.dataset.retry]); return; }
   const rc=e.target.closest("[data-recent]"); if(rc){ useRecent(+rc.dataset.recent); return; }
   const cn=e.target.closest("[data-checknow]"); if(cn){ checkNow(cn.dataset.checknow); return; }
+  const bb=e.target.closest("#rows [data-book]"); if(bb){ openBook(bb.dataset.book,bb.dataset.cls); return; }
   const rb=e.target.closest("[data-rate]"); if(rb){ const no=rb.dataset.no, n=+rb.dataset.rate; if(state.ratings[no]===n) delete state.ratings[no]; else state.ratings[no]=n; saveRatings(); render(); }
 });
 try{ const d=new Date(Date.now()+5.5*3600e3).toISOString().slice(0,10); $("date").min=d; }catch(e){}

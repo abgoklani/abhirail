@@ -1,4 +1,4 @@
-const CACHE = "abhirail-v8";
+const CACHE = "abhirail-v9";
 const SHELL = ["/", "/index.html", "/logo-mark.png", "/logo-word.png", "/icon-192.png", "/icon-512.png", "/manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {
