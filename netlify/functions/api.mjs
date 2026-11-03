@@ -5,6 +5,7 @@ const TTL = {
   stations: 7 * 24 * 3600,
   trains: 6 * 3600,
   schedule: 7 * 24 * 3600,
+  board: 6 * 3600,
   availability: 10 * 60,
   fare: 7 * 24 * 3600,
 };
@@ -209,6 +210,17 @@ export default async (req) => {
       const r = await cached("schedule", train, async () => {
         const b = await upstream("/api/v1/trains/" + train, {});
         return b.data || b;
+      });
+      return json({ ok: true, data: r.data, cachedAt: r.cachedAt });
+    }
+
+    if (route === "board") {
+      const code = (q.get("code") || "").toUpperCase(), date = q.get("date") || "";
+      if (!CODE.test(code) || !ISO.test(date)) return fail(400, "BAD_REQUEST", "Check the station and date.");
+      const r = await cached("board", code + "-" + date, async () => {
+        const b = await upstream("/api/v1/trains/stations/" + code + "/timetable/" + date, {});
+        const d = b.data || {};
+        return Array.isArray(d) ? d : (d.trains || []);
       });
       return json({ ok: true, data: r.data, cachedAt: r.cachedAt });
     }
