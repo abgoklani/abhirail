@@ -50,13 +50,21 @@ class Upstream extends Error {
   constructor(status, code, message) { super(message); this.status = status; this.code = code; }
 }
 
-async function cached(kind, key, loader) {
+// Seat status for a journey weeks away changes slowly; close to the date it changes fast.
+// Sharing one answer between everyone who asks within this window is what keeps credits flat as users grow.
+function availTtl(iso) {
+  const ist = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
+  const days = Math.round((Date.parse(iso) - Date.parse(ist)) / 864e5);
+  return days <= 1 ? 5 * 60 : days <= 3 ? 10 * 60 : days <= 10 ? 20 * 60 : 30 * 60;
+}
+
+async function cached(kind, key, loader, opts = {}) {
   const cache = store();
   const now = Math.floor(Date.now() / 1000);
   const k = kind + "/" + key;
   let hit = null;
   try { hit = await cache.get(k, { type: "json" }); } catch {}
-  if (hit && hit.exp > now) {
+  if (hit && hit.exp > now && !(opts.maxAge && now - hit.at > opts.maxAge)) {
     if (hit.notFound) throw new Upstream(404, hit.code || "NOT_FOUND", hit.message || "Not found.");
     return { data: hit.data, cachedAt: hit.at };
   }
@@ -71,7 +79,7 @@ async function cached(kind, key, loader) {
     throw e;
   }
   // An empty train list may be a hiccup upstream, so it is kept for 30 minutes, not hours.
-  const ttl = kind === "trains" && Array.isArray(data) && !data.length ? 30 * 60 : TTL[kind];
+  const ttl = opts.ttl || (kind === "trains" && Array.isArray(data) && !data.length ? 30 * 60 : TTL[kind]);
   try { await cache.setJSON(k, { data, at: now, exp: now + ttl }); } catch {}
   return { data, cachedAt: now };
 }
@@ -149,7 +157,7 @@ async function readHistory(train, from, to, cls, quota, d) {
   try { const h = await store().get(histKey(train, from, to, cls, quota, d), { type: "json" }); return h && Array.isArray(h.s) ? h.s : []; } catch { return []; }
 }
 
-function getAvailability(train, from, to, date, cls, quota, deadline) {
+function getAvailability(train, from, to, date, cls, quota, deadline, maxAge) {
   return cached("availability", [train, from, to, date, cls, quota].join("-"), async () => {
     const b = await upstream("/api/v1/trains/" + train + "/availability", { from, to, date: toDMY(date), class: cls, quota }, deadline, true);
     const list = Array.isArray(b.availability) ? b.availability : (b.data && b.data.availability) || [];
@@ -159,11 +167,11 @@ function getAvailability(train, from, to, date, cls, quota, deadline) {
       if (!d || !ISO.test(d)) return;
       await recordHistory(train, from, to, cls, quota, d, a.status, now);
       if (d === date) return;
-      try { await store().setJSON("availability/" + [train, from, to, d, cls, quota].join("-"), { data: { status: a.status, days: [], trainName: b.trainName || null }, at: now, exp: now + TTL.availability }); } catch {}
+      try { await store().setJSON("availability/" + [train, from, to, d, cls, quota].join("-"), { data: { status: a.status, days: [], trainName: b.trainName || null }, at: now, exp: now + availTtl(d) }); } catch {}
     }));
     const day = list.find((a) => a.date === date || a.date === toDMY(date)) || null;
     return { status: day ? day.status : null, days: list.slice(0, 6), trainName: b.trainName || null };
-  });
+  }, { ttl: availTtl(date), maxAge });
 }
 
 export default async (req) => {
@@ -197,6 +205,7 @@ export default async (req) => {
       const wanted = (q.get("classes") || "").toUpperCase().split(",").filter((c) => CLASSES.has(c));
       if (!TRAIN.test(train) || !CODE.test(from) || !CODE.test(to) || !ISO.test(date) || !QUOTAS.has(quota)) return fail(400, "BAD_REQUEST", "Check the train, stations and date.");
       const deadline = Date.now() + 22000;
+      const maxAge = q.get("fresh") === "1" ? 5 * 60 : 0; // "Refresh seats" accepts answers up to 5 minutes old
       let fares = {}, carried = [], at = 0;
       try {
         const f = await getFare(train, from, to, quota, Date.now() + 8000);
@@ -213,7 +222,7 @@ export default async (req) => {
           const i = next++, c = cls[i];
           if (deadline - Date.now() < 2000) { seats[i] = { class: c, status: null, fare: fares[c] ?? null, error: "TIMEOUT" }; continue; }
           try {
-            const a = await getAvailability(train, from, to, date, c, quota, deadline);
+            const a = await getAvailability(train, from, to, date, c, quota, deadline, maxAge);
             at = Math.max(at, a.cachedAt);
             seats[i] = { class: c, status: a.data.status, fare: fares[c] ?? null };
           } catch (e) {

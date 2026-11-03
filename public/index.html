@@ -880,7 +880,7 @@ async function search(){
       trains.push(trainBase({no:n.no,name:n.name,type:n.type,fromCode:a[0],fromName:a[1],toCode:b[0],toName:b[1],dep,dur,date,classes:n.classes,fares:{},source:"new",runNote:n.runNote,probe:true}));
     });
     trains.sort((x,y)=>relDep(x.dep,s)-relDep(y.dep,s));
-    state.ctx={from,to,date,s,e,quota,total:trains.length,checkedAt:null,startedAt:Date.now()};
+    state.ctx={from,to,date,s,e,quota,total:trains.length,checkedAt:null,startedAt:Date.now(),fresh:!!state.wantFresh}; state.wantFresh=false;
     pushRecent();
     if(failedPairs.length) notice("warn","Some stations couldn't be searched","Trains between "+failedPairs.slice(0,4).join(", ")+(failedPairs.length>4?" and "+(failedPairs.length-4)+" more":"")+" may be missing.",{label:"Search again",onClick:()=>search()});
     if(!trains.length){ progress(false); render(); notice("info","No trains in this window","No trains leave "+(from.name)+" for "+(to.name)+" between "+fmtHM(s)+" and "+fmtHM(e)+" on "+fmtDate(date)+". Widen the time window or try nearby dates."); }
@@ -906,7 +906,7 @@ function classesToCheck(t){
   return cl.filter(c=>["1A","2A","3A","3E","CC","EC","SL","2S"].includes(c));
 }
 async function checkOne(t,want){
-  const r=await api("seats",{train:t.no,from:t.fromCode,to:t.toCode,date:t.date,quota:state.ctx.quota,classes:want?want.join(","):""});
+  const r=await api("seats",Object.assign({train:t.no,from:t.fromCode,to:t.toCode,date:t.date,quota:state.ctx.quota,classes:want?want.join(","):""},state.ctx.fresh?{fresh:1}:{}));
   const d=r.data||{}; const at=r.cachedAt? r.cachedAt*1000 : null;
   const fares=Object.assign({},t.fares||{},d.fares||{});
   const seats=d.seats||[];
@@ -1316,6 +1316,8 @@ function renderMore(){
 
 /* ---------- freshness and recent searches ---------- */
 const STALE_MS=10*60*1000;
+// Matches how long the server shares one answer, so a fresh search isn't flagged as old straight away.
+function staleMs(iso){ const d=daysLeft(iso); return d==null||d<=1? 10*60e3 : d<=3? 15*60e3 : d<=10? 25*60e3 : 40*60e3; }
 function istToday(){ return new Date(Date.now()+5.5*3600e3).toISOString().slice(0,10); }
 function initDate(){
   const today=istToday(); const el=$("date");
@@ -1354,11 +1356,11 @@ function checkStale(){
     initDate(); return;
   }
   const at=state.ctx.checkedAt||state.ctx.startedAt; if(!at) return;
-  if(Date.now()-at < STALE_MS) return;
+  if(Date.now()-at < staleMs(state.ctx.date)) return;
   const el=$("stale");
   el.innerHTML='<p><strong>These seats were checked '+esc(ago(at))+'.</strong> Seat status changes quickly, so refresh before you book.</p><button type="button" class="btn primary small" id="staleRefresh">Refresh seats</button>';
   el.hidden=false; document.body.classList.add("is-stale");
-  $("staleRefresh").onclick=()=>{ hideStale(); search(); };
+  $("staleRefresh").onclick=()=>{ hideStale(); state.wantFresh=true; search(); };
 }
 
 /* ---------- example ---------- */
