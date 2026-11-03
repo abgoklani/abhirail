@@ -272,6 +272,13 @@ th{background:#111;position:sticky;top:0}
 }
 @media (prefers-reduced-motion: reduce){ .bar i{transition:none} }
 @media (max-width: 760px){ .summary{grid-template-columns:repeat(3,minmax(0,1fr))} .tile.best{grid-column:1/-1} }
+.addtrain{margin:14px 0 4px;border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:14px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between}
+.addtrain[hidden]{display:none}
+.addtrain .at-t{display:flex;flex-direction:column;gap:2px;min-width:220px;flex:1}
+.addtrain .at-t span{color:var(--muted);font-size:13px}
+.addtrain .at-f{display:flex;gap:8px;flex:1;min-width:240px}
+.addtrain input{flex:1;min-width:0;font-size:16px;padding:9px 12px;border-radius:8px;border:1px solid var(--line);background:#0b0b0b;color:inherit}
+.addtrain a{font-size:13px;color:var(--muted);white-space:nowrap}
 .debug{background:#050505;border:1px dashed #333;border-radius:8px;padding:12px;font:11px/1.4 var(--font-mono);color:#9a9a9a;white-space:pre-wrap;max-height:480px;overflow:auto}
 input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appearance:none;appearance:none;display:block;min-height:44px;line-height:1.2}
 input[type="date"]::-webkit-date-and-time-value,input[type="time"]::-webkit-date-and-time-value{text-align:left}
@@ -399,6 +406,11 @@ body.is-stale .board,body.is-stale .summary{opacity:.45;filter:grayscale(.4)}
 
   <div class="board" id="rows" aria-live="polite"></div>
   <div id="moreWrap"></div>
+  <form class="addtrain" id="addTrain" hidden>
+    <div class="at-t"><b>Missing a train?</b><span>The railway data doesn't list every train. Add one by its number and AbhiRail checks its seats.</span></div>
+    <div class="at-f"><input id="addTrainNo" inputmode="numeric" pattern="[0-9]*" maxlength="5" placeholder="Train no., e.g. 22913" aria-label="Train number" autocomplete="off"><button class="btn primary small" id="addTrainBtn" type="submit">Add &amp; check</button></div>
+    <a id="fullList" href="#" target="_blank" rel="noopener">See every train on this route ↗</a>
+  </form>
 
 
   <div class="legend">
@@ -527,16 +539,16 @@ function tierOf(name,type,no){
 
 /* ---------- API ---------- */
 const CITIES = [
-  {name:"Delhi", codes:["NDLS","NZM","DLI","ANVT"]},
-  {name:"Mumbai", codes:["CSMT","LTT","MMCT","BDTS","DR"]},
-  {name:"Kolkata", codes:["HWH","SDAH","KOAA"]},
-  {name:"Chennai", codes:["MAS","MS"]},
-  {name:"Bengaluru", codes:["SBC","SMVB","YPR"]},
+  {name:"Delhi", codes:["NDLS","NZM","DLI","ANVT"], extra:["DEE","DEC"]},
+  {name:"Mumbai", codes:["CSMT","LTT","DR","MMCT","BDTS","DDR"], extra:["TNA","KYN","PNVL"]},
+  {name:"Kolkata", codes:["HWH","SDAH","KOAA"], extra:["SRC"]},
+  {name:"Chennai", codes:["MAS","MS"], extra:["MSB","PER"]},
+  {name:"Bengaluru", codes:["SBC","SMVB","YPR"], extra:["BNC","KJM"]},
   {name:"Hyderabad", codes:["SC","HYB","KCG"]},
   {name:"Lucknow", codes:["LKO","LJN"]},
-  {name:"Kanpur", codes:["CNB"]},
-  {name:"Prayagraj", codes:["PRYJ","PCOI"]},
-  {name:"Varanasi", codes:["BSB","BSBS"]},
+  {name:"Kanpur", codes:["CNB"], extra:["CPA"]},
+  {name:"Prayagraj", codes:["PRYJ","PCOI"], extra:["NYN","SFG"]},
+  {name:"Varanasi", codes:["BSB","BSBS"], extra:["BCY"]},
   {name:"Patna", codes:["PNBE","PPTA","RJPB"]},
   {name:"Jaipur", codes:["JP"]},
   {name:"Ahmedabad", codes:["ADI"]},
@@ -547,7 +559,20 @@ const CITIES = [
   {name:"Jhansi", codes:["VGLJ"]},
   {name:"Guwahati", codes:["GHY","KYQ"]}
 ];
-const MAX_PAIRS = 9;
+const MAX_PAIRS = 40;
+// Main stations of a city are paired with each other; extra stations (Thane, Kalyan, Naini…) are paired with the other side's main stations.
+function placeCodes(pl){
+  if(pl && pl.kind==="city"){ const c=CITIES.find(x=>x.name===pl.name); if(c) return {main:c.codes.slice(),extra:(c.extra||[]).slice()}; }
+  return {main:(pl&&pl.codes||[]).slice(),extra:[]};
+}
+function stationPairs(from,to){
+  const F=placeCodes(from), T=placeCodes(to), pairs=[];
+  const add=(a,b)=>{ if(a!==b && !pairs.some(p=>p[0]===a&&p[1]===b)) pairs.push([a,b]); };
+  F.main.forEach(a=>T.main.forEach(b=>add(a,b)));
+  F.extra.forEach(a=>T.main.forEach(b=>add(a,b)));
+  F.main.forEach(a=>T.extra.forEach(b=>add(a,b)));
+  return pairs;
+}
 
 function apiError(status, body){
   const code = (body && body.code) || ({401:"UNAUTHORIZED",402:"INSUFFICIENT_CREDITS",404:"NOT_FOUND",429:"LIMIT"}[status]) || "SERVER";
@@ -719,7 +744,7 @@ async function search(){
   const todayIso=new Date(Date.now()+5.5*3600e3).toISOString().slice(0,10);
   if(date<todayIso){ notice("warn","That date has passed","Pick today or a later date."); return; }
   state.searching=true; $("go").disabled=true; $("go").textContent="Searching…";
-  state.example=false; state.rows=[]; state.pending=[]; hideStale();
+  state.example=false; state.rows=[]; state.pending=[]; hideStale(); clearSession();
   $("fromSugg").hidden=true; $("toSugg").hidden=true; state.queueRun=(state.queueRun||0)+1; state.queue=[]; state.queueBusy=false; state.queueActive=new Set(); state.queueHeld=new Set();
   saveForm(); render();
   try{
@@ -727,17 +752,27 @@ async function search(){
     const [from,to]=await Promise.all([resolvePlace("from","from"),resolvePlace("to","to")]);
     if(from.codes.join()===to.codes.join()) throw {code:"input",message:"From and To are the same place."};
     const quota=$("quota").value;
-    const pairs=[]; from.codes.forEach(a=>to.codes.forEach(b=>{ if(a!==b) pairs.push([a,b]); }));
+    const pairs=stationPairs(from,to);
     const usePairs=pairs.slice(0,MAX_PAIRS);
-    progress(true,"Finding trains "+(from.label||from.name)+" → "+(to.label||to.name)+"…",0.12);
-    const seen=new Map(); let errs=0, lastErr=null;
-    await pool(usePairs,5,async([a,b])=>{
-      try{ const r=await api("trains",{from:a,to:b,date}); (r.data||[]).forEach(it=>{ if(!runsOn(it,date)) return; const t=mapTrain(it,date); if(!t.no||seen.has(t.no)) return; if(!t.fromCode) t.fromCode=a; if(!t.toCode) t.toCode=b; seen.set(t.no,t); }); }
-      catch(err){ errs++; lastErr=err; if(["NO_KEY","UNAUTHORIZED","INSUFFICIENT_CREDITS","LIMIT"].includes(err.code)) throw err; }
+    const found=new Array(usePairs.length), failedPairs=[]; let lastErr=null, doneP=0;
+    progress(true,"Finding trains "+(from.label||from.name)+" → "+(to.label||to.name)+" · "+usePairs.length+" station pairs…",0.08);
+    await pool(usePairs.map((p,i)=>[p,i]),6,async([[a,b],i])=>{
+      for(let k=0;k<3;k++){
+        try{ const r=await api("trains",{from:a,to:b,date}); found[i]=r.data||[]; break; }
+        catch(err){
+          if(["NO_KEY","UNAUTHORIZED","INVALID_API_KEY","INSUFFICIENT_CREDITS"].includes(err.code)) throw err;
+          lastErr=err; if(k<2) await sleep(err.code==="LIMIT"||err.code==="RATE_LIMIT_EXCEEDED"?3000:1000*(k+1)); else failedPairs.push(a+"→"+b);
+        }
+      }
+      doneP++; progress(true,"Finding trains · "+doneP+" of "+usePairs.length+" station pairs searched",0.08+0.12*doneP/usePairs.length);
     });
-    if(errs===usePairs.length && lastErr) throw lastErr;
+    if(failedPairs.length===usePairs.length && lastErr) throw lastErr;
+    const seen=new Map();
+    found.forEach((list,i)=>{ if(!list) return; const [a,b]=usePairs[i];
+      list.forEach(it=>{ if(!runsOn(it,date)) return; const t=mapTrain(it,date); if(!t.no||seen.has(t.no)) return; if(!t.fromCode) t.fromCode=a; if(!t.toCode) t.toCode=b; seen.set(t.no,t); }); });
     let trains=[...seen.values()].filter(t=>inWindow(t.dep,s,e));
-    const fromSet=new Set(from.codes), toSet=new Set(to.codes);
+    const FC=placeCodes(from), TC=placeCodes(to);
+    const fromSet=new Set(FC.main.concat(FC.extra)), toSet=new Set(TC.main.concat(TC.extra));
     NEW_TRAINS.forEach(n=>{ if(seen.has(n.no)) return;
       const i=n.stops.findIndex(x=>fromSet.has(x[0])); if(i<0) return;
       const j=n.stops.findIndex((x,k)=>k>i && toSet.has(x[0])); if(j<0) return;
@@ -749,12 +784,12 @@ async function search(){
     trains.sort((x,y)=>relDep(x.dep,s)-relDep(y.dep,s));
     state.ctx={from,to,date,s,e,quota,total:trains.length,checkedAt:null,startedAt:Date.now()};
     pushRecent();
-    if(pairs.length>MAX_PAIRS) notice("info","Searching the main stations only","This city pair has "+pairs.length+" station combinations. AbhiRail checks the first "+MAX_PAIRS+" to save data. Pick a specific station to search others.");
+    if(failedPairs.length) notice("warn","Some stations couldn't be searched","Trains between "+failedPairs.slice(0,4).join(", ")+(failedPairs.length>4?" and "+(failedPairs.length-4)+" more":"")+" may be missing.",{label:"Search again",onClick:()=>search()});
     if(!trains.length){ progress(false); render(); notice("info","No trains in this window","No trains leave "+(from.name)+" for "+(to.name)+" between "+fmtHM(s)+" and "+fmtHM(e)+" on "+fmtDate(date)+". Widen the time window or try nearby dates."); }
     else{
       trains.forEach(t=>{ state.rows.push(...rowsFromBoard(t,null,null,null)); });
       render();
-      state.pending=[];
+      state.pending=trains.slice(40);
       checkSeats(trains.slice(0,40));
     }
   }catch(err){
@@ -834,6 +869,7 @@ async function checkSeats(trains){
   const run=(state.queueRun||0)+1; state.queueRun=run;
   const want=classFilter();
   state.queue=trains.map(t=>Object.assign({},t,{retryCls:null})); state.queueActive=new Set(); state.queueHeld=new Set(); state.queueTries={}; state.queueBusy=true;
+  state.queueObjs=new Map(state.queue.map(t=>[t.no,t]));
   if(!state.rateNow) loadRate();
   const total=trains.length; let done=0; let blocking=null;
   const label=()=>"Checked "+done+" of "+total+" trains";
@@ -893,9 +929,79 @@ async function retryTrains(nos){
   const seen=new Set(); const list=[];
   state.rows.forEach(r0=>{ if(nos.includes(r0.no)&&!seen.has(r0.no)){ seen.add(r0.no); list.push(Object.assign({},r0,{st:undefined,errText:undefined,retryable:undefined})); } });
   state.rows=state.rows.map(r0=>nos.includes(r0.no)?Object.assign(r0,{errText:undefined,retryable:undefined}):r0);
-  if(state.queueBusy && state.queue){ list.forEach(t=>{ if(!state.queue.some(q=>q.no===t.no)) state.queue.unshift(t); }); render(); return; }
+  if(state.queueBusy && state.queue){ list.forEach(t=>{ if(!state.queue.some(q=>q.no===t.no)){ state.queue.unshift(t); state.queueObjs&&state.queueObjs.set(t.no,t); } }); render(); return; }
   clearNotices(); checkSeats(list);
 }
+async function addTrainByNumber(no){
+  no=String(no||"").replace(/\D/g,"");
+  if(!/^\d{5}$/.test(no)){ notice("warn","Enter a 5-digit train number","For example 22913."); return; }
+  if(!state.ctx) return;
+  if(state.rows.some(r0=>r0.no===no)){ notice("info","Already in the list","Train "+no+" is already shown."); return; }
+  const ctx=state.ctx, F=placeCodes(ctx.from), T=placeCodes(ctx.to);
+  const fromAll=F.main.concat(F.extra), toAll=T.main.concat(T.extra);
+  const btn=$("addTrainBtn"); btn.disabled=true; btn.textContent="Finding…";
+  try{
+    let sch=null;
+    try{ sch=(await api("schedule",{train:no})).data; }catch(e){ if(["NO_KEY","UNAUTHORIZED","INSUFFICIENT_CREDITS"].includes(e.code)) throw e; }
+    const stops=(sch && Array.isArray(sch.stations))? sch.stations : [];
+    const at=c=>stops.findIndex(x=>String(x.code||"").toUpperCase()===c);
+    let a=null, b=null;
+    for(const c of fromAll){ const i=at(c); if(i>=0){ a={i,code:c}; break; } }
+    if(a) for(const c of toAll){ const j=at(c); if(j>a.i){ b={i:j,code:c}; break; } }
+    let fromCode=a&&a.code, toCode=b&&b.code;
+    if(!toCode){
+      // The schedule is incomplete for some trains: ask live seats which station pair this train serves.
+      const order=["3A","2A","SL","CC","1A","3E","EC"]; const wf=classFilter();
+      const want=order.filter(c=>!wf||wf.includes(c)).slice(0,2);
+      const tries=[]; (a?[a.code]:F.main).forEach(x=>T.main.forEach(y=>{ if(x!==y) tries.push([x,y]); }));
+      for(const [x,y] of tries.slice(0,6)){
+        btn.textContent="Checking "+x+"→"+y+"…";
+        try{ const r=await api("seats",{train:no,from:x,to:y,date:ctx.date,quota:ctx.quota,classes:want.join(",")});
+          if(((r.data||{}).seats||[]).some(z=>z.status)){ fromCode=x; toCode=y; break; } }
+        catch(e){ if(["NO_KEY","UNAUTHORIZED","INSUFFICIENT_CREDITS"].includes(e.code)) throw e; }
+      }
+    }
+    if(!fromCode || !toCode){ notice("warn","Couldn't find train "+no+" on this route","Check the number. It may not run between "+(ctx.from.name)+" and "+(ctx.to.name)+" on "+fmtDate(ctx.date)+"."); return; }
+    const sa=stops[at(fromCode)], sb=stops[at(toCode)];
+    const dep=sa && sa.departureMin!=null ? Number(sa.departureMin) : null;
+    let dur=null;
+    if(sa && sb && sb.arrivalMin!=null){ const d0=Number(sa.dayOffset||0), d1=Number(sb.arrivalDayOffset!=null?sb.arrivalDayOffset:(sb.dayOffset||0)); dur=(d1*1440+Number(sb.arrivalMin))-(d0*1440+dep); if(!(dur>0)) dur=null; }
+    if(sch && sch.runningDays && sa && !runsOn({runningDays:sch.runningDays,fromStationDayOffset:sa.dayOffset||0},ctx.date)){
+      notice("info","Train "+no+" doesn't run that day","It doesn't leave "+fromCode+" on "+fmtDate(ctx.date)+". Seats are checked anyway in case the timetable has changed.");
+    }
+    const t=trainBase({no,name:(sch&&sch.trainName)||("Train "+no),type:(sch&&sch.trainType)||"",fromCode,fromName:sa?sa.name:"",toCode,toName:sb?sb.name:"",dep,dur,date:ctx.date,classes:[],fares:{},source:"live",added:true});
+    state.rows.push(...rowsFromBoard(t,null,null,null));
+    $("addTrainNo").value="";
+    if(state.queueBusy){ state.queue.unshift(t); state.queueObjs.set(t.no,t); render(); } else checkSeats([t]);
+  }catch(err){ const c=errCopy(err); notice("bad",c.title,c.text); }
+  finally{ btn.disabled=false; btn.textContent="Add & check"; }
+}
+
+/* ---------- keep the last search on this device ---------- */
+const SESSION_KEY="abhirail-session"; let sessionTimer=null;
+function sessionTodo(){
+  const nos=queuedSet(); const out=new Map();
+  (state.queue||[]).forEach(t=>out.set(t.no,t));
+  if(state.queueObjs) state.queueObjs.forEach((t,no)=>{ if(nos.has(no) && !out.has(no)) out.set(no,t); });
+  return [...out.values()].map(t=>Object.assign({},t,{retryCls:null}));
+}
+function saveSession(){
+  try{
+    if(!state.ctx || !state.rows.length || state.example) return;
+    localStorage.setItem(SESSION_KEY,JSON.stringify({v:1,savedAt:Date.now(),ctx:state.ctx,rows:state.rows,todo:state.queueBusy?sessionTodo():[],pending:state.pending||[]}));
+  }catch(e){}
+}
+function saveSessionSoon(){ clearTimeout(sessionTimer); sessionTimer=setTimeout(saveSession,400); }
+function clearSession(){ clearTimeout(sessionTimer); try{ localStorage.removeItem(SESSION_KEY); }catch(e){} }
+function restoreSession(){
+  let sv=null; try{ sv=JSON.parse(localStorage.getItem(SESSION_KEY)||"null"); }catch(e){}
+  if(!sv || sv.v!==1 || !sv.ctx || !Array.isArray(sv.rows) || !sv.rows.length) return null;
+  if(Date.now()-sv.savedAt>12*3600e3 || sv.ctx.date<istToday()){ clearSession(); return null; }
+  state.ctx=sv.ctx; state.rows=sv.rows; state.pending=sv.pending||[];
+  try{ $("date").value=sv.ctx.date; }catch(e){}
+  return sv;
+}
+
 function setRows(no,newRows){ const i=state.rows.findIndex(r=>r.no===no); state.rows=state.rows.filter(r=>r.no!==no); if(i<0) state.rows.push(...newRows); else state.rows.splice(Math.min(i,state.rows.length),0,...newRows); }
 
 /* ---------- render ---------- */
@@ -1030,9 +1136,15 @@ function renderMore(){
   const w=$("moreWrap"); w.innerHTML="";
   if(state.pending.length && !state.searching){
     const b=document.createElement("button"); b.className="btn ghost"; b.type="button"; b.textContent="Check seats on "+state.pending.length+" more trains";
-    b.onclick=async()=>{ const next=state.pending.splice(0,SEAT_CHECK_CAP); state.searching=true; render(); await checkSeats(next); state.searching=false; render(); };
+    b.onclick=()=>{ const next=state.pending.splice(0); if(state.queueBusy){ next.forEach(t=>{ state.queue.push(t); state.queueObjs.set(t.no,t); }); render(); } else checkSeats(next); };
     w.appendChild(b);
   }
+  const at=$("addTrain"); const show=!!(state.ctx && state.ctx.from && state.ctx.from.codes && !state.searching);
+  at.hidden=!show;
+  if(show){ const F=placeCodes(state.ctx.from), T=placeCodes(state.ctx.to);
+    const slug=pl=>pl.kind==="city"?"&"+(pl===state.ctx.from?"fromPlace":"toPlace")+"="+encodeURIComponent(pl.name.toLowerCase()):"";
+    $("fullList").href="https://www.railroute.in/search?from="+encodeURIComponent(F.main[0]||"")+"&to="+encodeURIComponent(T.main[0]||"")+"&date="+encodeURIComponent(state.ctx.date)+slug(state.ctx.from)+slug(state.ctx.to); }
+  saveSessionSoon();
 }
 
 
@@ -1071,7 +1183,7 @@ function hideStale(){ const el=$("stale"); el.hidden=true; el.innerHTML=""; docu
 function checkStale(){
   if(state.searching || !state.ctx || !state.rows.length) return;
   if(state.ctx.date<istToday()){
-    state.rows=[]; state.ctx=null; hideStale(); render(); clearNotices();
+    state.rows=[]; state.ctx=null; hideStale(); clearSession(); render(); clearNotices();
     notice("info","That travel date has passed","Pick a new date and search again.");
     initDate(); return;
   }
@@ -1108,11 +1220,21 @@ try{ const d=new Date(Date.now()+5.5*3600e3).toISOString().slice(0,10); $("date"
 state.example=false;
 loadForm();
 initDate();
+const restored=restoreSession();
 render();
-initApi();
+initApi().then(()=>{
+  if(!restored) return;
+  checkStale();
+  if(restored.todo && restored.todo.length && state.keySet){
+    notice("info","Picked up where you left off","Checking seats on the "+restored.todo.length+" trains that were still waiting. Trains already checked are not checked again.");
+    checkSeats(restored.todo);
+  }
+});
+$("addTrain").addEventListener("submit",e=>{ e.preventDefault(); addTrainByNumber($("addTrainNo").value); });
+window.addEventListener("pagehide",saveSession);
 if("serviceWorker" in navigator){ window.addEventListener("load",()=>{ navigator.serviceWorker.register("/sw.js").catch(()=>{}); }); }
 setInterval(()=>{ if(!state.searching){ renderSummary(sortRows(state.rows)); checkStale(); } },60000);
-document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkStale(); });
+document.addEventListener("visibilitychange",()=>{ if(document.hidden) saveSession(); else checkStale(); });
 window.addEventListener("pageshow",()=>checkStale());
 })();
 </script>
