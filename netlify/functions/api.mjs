@@ -128,6 +128,27 @@ function getFare(train, from, to, quota, deadline) {
   });
 }
 
+/* Waitlist history: every availability answer covers ~6 journey dates. Each status is kept as a
+   snapshot per train, stations, class, quota and journey date, so AbhiRail can see how fast a
+   waitlist is moving. A new snapshot is added when the status changes or 6 hours have passed. */
+const HIST_KEEP = 60, HIST_GAP = 6 * 3600;
+const histKey = (train, from, to, cls, quota, d) => "hist/" + [train, from, to, cls, quota, d].join("-");
+async function recordHistory(train, from, to, cls, quota, d, status, now) {
+  if (!status || !/WL|AVAIL|RAC|REGRET/i.test(status)) return;
+  const k = histKey(train, from, to, cls, quota, d);
+  try {
+    const h = (await store().get(k, { type: "json" })) || { v: 1, s: [] };
+    const last = h.s[h.s.length - 1];
+    if (last && last[1] === status && now - last[0] < HIST_GAP) return;
+    h.s.push([now, status]);
+    if (h.s.length > HIST_KEEP) h.s = [h.s[0]].concat(h.s.slice(-(HIST_KEEP - 1)));
+    await store().setJSON(k, h);
+  } catch {}
+}
+async function readHistory(train, from, to, cls, quota, d) {
+  try { const h = await store().get(histKey(train, from, to, cls, quota, d), { type: "json" }); return h && Array.isArray(h.s) ? h.s : []; } catch { return []; }
+}
+
 function getAvailability(train, from, to, date, cls, quota, deadline) {
   return cached("availability", [train, from, to, date, cls, quota].join("-"), async () => {
     const b = await upstream("/api/v1/trains/" + train + "/availability", { from, to, date: toDMY(date), class: cls, quota }, deadline, true);
@@ -135,7 +156,9 @@ function getAvailability(train, from, to, date, cls, quota, deadline) {
     const now = Math.floor(Date.now() / 1000);
     await Promise.all(list.map(async (a) => {
       const d = /^\d{2}-\d{2}-\d{4}$/.test(a.date || "") ? a.date.split("-").reverse().join("-") : a.date;
-      if (!d || d === date || !ISO.test(d)) return;
+      if (!d || !ISO.test(d)) return;
+      await recordHistory(train, from, to, cls, quota, d, a.status, now);
+      if (d === date) return;
       try { await store().setJSON("availability/" + [train, from, to, d, cls, quota].join("-"), { data: { status: a.status, days: [], trainName: b.trainName || null }, at: now, exp: now + TTL.availability }); } catch {}
     }));
     const day = list.find((a) => a.date === date || a.date === toDMY(date)) || null;
@@ -202,6 +225,12 @@ export default async (req) => {
         }
       };
       await Promise.all([worker(), worker(), worker()]);
+      // Oldest snapshot we hold for each class on this date, so the page can see how far the waitlist moved since.
+      await Promise.all(seats.map(async (x) => {
+        if (!x || !x.status || !/WL/i.test(x.status)) return;
+        const h = await readHistory(train, from, to, x.class, quota, date);
+        if (h.length && Math.floor(Date.now() / 1000) - h[0][0] >= 6 * 3600) x.since = h[0];
+      }));
       return json({ ok: true, data: { fares, classes: cls, seats, known: carried.length > 0, retryAfter: retryAfter || null }, cachedAt: at || null });
     }
 
