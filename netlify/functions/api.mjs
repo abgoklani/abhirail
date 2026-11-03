@@ -4,6 +4,7 @@ const BASE = "https://api.irctc.dev";
 const TTL = {
   stations: 7 * 24 * 3600,
   trains: 6 * 3600,
+  route: 24 * 3600,
   availability: 10 * 60,
   fare: 7 * 24 * 3600,
 };
@@ -157,9 +158,11 @@ export default async (req) => {
 
     if (route === "trains") {
       const from = (q.get("from") || "").toUpperCase(), to = (q.get("to") || "").toUpperCase(), date = q.get("date") || "";
-      if (!CODE.test(from) || !CODE.test(to) || !ISO.test(date)) return fail(400, "BAD_REQUEST", "Check the stations and date.");
-      const r = await cached("trains", from + "-" + to + "-" + date, async () => {
-        const b = await upstream("/api/v1/trains/search", { from, to, date });
+      const anyDay = q.get("any") === "1";
+      if (!CODE.test(from) || !CODE.test(to) || (!anyDay && !ISO.test(date))) return fail(400, "BAD_REQUEST", "Check the stations and date.");
+      // any=1 asks for every train on the route regardless of day; the page filters by running days itself.
+      const r = await cached(anyDay ? "route" : "trains", from + "-" + to + (anyDay ? "" : "-" + date), async () => {
+        const b = await upstream("/api/v1/trains/search", anyDay ? { from, to } : { from, to, date });
         return Array.isArray(b.data) ? b.data : (b.data && b.data.trains) || [];
       });
       return json({ ok: true, data: r.data, cachedAt: r.cachedAt });
