@@ -287,6 +287,7 @@ input[type="date"]::-webkit-date-and-time-value,input[type="time"]::-webkit-date
  form.search .f-time{grid-column:1/-1 !important;grid-row:4 !important}
  form.search .f-class{grid-column:1/-1 !important;grid-row:5 !important}
  form.search .row2{grid-column:1/-1 !important;grid-row:6 !important} }
+.linkbtn{background:none;border:0;padding:0 0 0 6px;font:inherit;font-weight:700;color:inherit;text-decoration:underline;cursor:pointer}
 </style>
 </head>
 <body>
@@ -754,36 +755,53 @@ function classesToCheck(t){
   if(want) cl=cl.filter(c=>want.includes(c));
   return cl.filter(c=>["1A","2A","3A","3E","CC","EC","SL","2S"].includes(c));
 }
+async function checkOne(t,want){
+  const r=await api("seats",{train:t.no,from:t.fromCode,to:t.toCode,date:t.date,quota:state.ctx.quota,classes:want?want.join(","):""});
+  const d=r.data||{}; const at=r.cachedAt? r.cachedAt*1000 : null;
+  const fares=Object.assign({},t.fares||{},d.fares||{});
+  const seats=d.seats||[];
+  const tt=Object.assign({},t,{fares,classes:d.classes&&d.classes.length?d.classes:t.classes});
+  const failed=seats.filter(x=>x.error && x.error!=="NOT_FOUND");
+  if(t.probe && !seats.some(x=>x.status) && !failed.length){ setRows(t.no,rowsFromBoard(Object.assign({},t,{noLive:true}),null,null,null)); return 0; }
+  if(!seats.length){ setRows(t.no, d.known? [] : rowsFromBoard(tt,null,at,null)); return 0; }
+  let rows=rowsFromBoard(tt,seats.map(x=>({classCode:x.class,status:x.status,fare:x.fare??fares[x.class]??null})),at,null);
+  if(failed.length){ const fs=new Set(failed.map(x=>x.class)); rows=rows.map(rw=>Object.assign(rw,{errText:failed.length===seats.length?"Seats couldn't be checked":"Some classes couldn't be checked",retryable:true},fs.has(rw.cls)?{st:{kind:"na",pct:null,label:"Couldn't check"}}:{})); }
+  setRows(t.no,rows);
+  if(at) state.ctx.checkedAt=Math.max(state.ctx.checkedAt||0,at);
+  return failed.length;
+}
 async function checkSeats(trains){
-  let done=0; const total=trains.length; let blocking=null;
-  const want=classFilter();
+  const want=classFilter(); const total=trains.length; let done=0; let blocking=null;
   progress(true,"Checking seats on "+total+" trains…",0.25);
-  await pool(trains,6,async(t)=>{
+  let retry=[];
+  await pool(trains,3,async(t)=>{
     if(blocking) return;
-    try{
-      const r=await api("seats",{train:t.no,from:t.fromCode,to:t.toCode,date:t.date,quota:state.ctx.quota,classes:want?want.join(","):""});
-      const d=r.data||{}; const at=(r.cachedAt||0)*1000||Date.now();
-      const fares=Object.assign({},t.fares||{},d.fares||{});
-      const seats=d.seats||[];
-      const tt=Object.assign({},t,{fares,classes:d.classes&&d.classes.length?d.classes:t.classes});
-      const anyLive=seats.some(x=>x.status);
-      if(t.probe && !anyLive){ setRows(t.no,rowsFromBoard(Object.assign({},t,{noLive:true}),null,null,null)); }
-      else if(!seats.length){ setRows(t.no, d.known? [] : rowsFromBoard(tt,null,at,null)); }
-      else {
-        let rows=rowsFromBoard(tt,seats.map(x=>({classCode:x.class,status:x.status,fare:x.fare??fares[x.class]??null})),at,null);
-        const failed=seats.filter(x=>x.error && x.error!=="NOT_FOUND");
-        if(failed.length) rows=rows.map(rw=>Object.assign(rw,{errText:"Some classes could not be checked"}));
-        setRows(t.no,rows);
-      }
-      state.ctx.checkedAt=Math.max(state.ctx.checkedAt||0,at);
-    }catch(err){
-      if(["NO_KEY","UNAUTHORIZED","INSUFFICIENT_CREDITS","LIMIT"].includes(err.code)){ blocking=err; }
-      else setRows(t.no,rowsFromBoard(Object.assign({},t,t.probe?{noLive:true}:{}),null,null,null).map(rw=>Object.assign(rw,{errText:errCopy(err).title})));
+    try{ if(await checkOne(t,want)) retry.push(t); }
+    catch(err){
+      if(["NO_KEY","UNAUTHORIZED","INSUFFICIENT_CREDITS"].includes(err.code)) blocking=err;
+      else { retry.push(t); setRows(t.no,rowsFromBoard(Object.assign({},t,t.probe?{noLive:true}:{}),null,null,null).map(rw=>Object.assign(rw,{errText:"Seats couldn't be checked",retryable:true}))); }
     }
-    done++; progress(true,"Checked "+done+" of "+total+" trains",0.25+0.75*done/total); render();
+    done++; progress(true,"Checked "+done+" of "+total+" trains",0.25+0.6*done/total); render();
   });
+  for(const wait of [2500,6000]){
+    if(blocking || !retry.length) break;
+    progress(true,"Railway data is busy. Retrying "+retry.length+" trains…",0.9);
+    await sleep(wait);
+    const again=[]; 
+    await pool(retry,2,async(t)=>{ try{ if(await checkOne(t,want)) again.push(t); }catch(err){ if(["NO_KEY","UNAUTHORIZED","INSUFFICIENT_CREDITS"].includes(err.code)) blocking=err; else again.push(t); } render(); });
+    retry=again;
+  }
   if(blocking){ const c=errCopy(blocking); notice("bad",c.title,c.text); }
+  else if(retry.length){ notice("warn","Some trains couldn't be checked",retry.length+" trains still have missing seats because the railway data service is busy.",{label:"Retry missing",onClick:()=>retryTrains(retry.map(t=>t.no))}); }
   progress(false); render();
+}
+async function retryTrains(nos){
+  if(state.searching||!state.ctx) return;
+  state.searching=true; $("go").disabled=true; clearNotices();
+  const seen=new Set(); const list=[];
+  state.rows.forEach(r=>{ if(nos.includes(r.no)&&!seen.has(r.no)){ seen.add(r.no); list.push(r); } });
+  try{ await checkSeats(list.map(r=>Object.assign({},r,{st:undefined,errText:undefined,retryable:undefined}))); }
+  finally{ state.searching=false; $("go").disabled=false; render(); }
 }
 function setRows(no,newRows){ const i=state.rows.findIndex(r=>r.no===no); state.rows=state.rows.filter(r=>r.no!==no); if(i<0) state.rows.push(...newRows); else state.rows.splice(Math.min(i,state.rows.length),0,...newRows); }
 
@@ -816,7 +834,7 @@ function groupTrains(rows){
     if(!g){ g=Object.assign({},r,{tiles:[],alts:[]}); map.set(r.no,g); }
     g.tiles.push(r); if(r.alt) g.alts.push(Object.assign({cls:r.cls},r.alt));
     if(r.checkedAt) g.checkedAt=Math.max(g.checkedAt||0,r.checkedAt);
-    if(r.errText) g.errText=r.errText;
+    if(r.errText) g.errText=r.errText; if(r.retryable) g.retryable=true;
   });
   return [...map.values()].map(g=>{
     g.tiles.sort((a,b)=>{ const ia=CLS_ORDER.indexOf(a.cls), ib=CLS_ORDER.indexOf(b.cls); return (ia<0?99:ia)-(ib<0?99:ib); });
@@ -872,7 +890,7 @@ function render(){
     if(g.notRunning) notes.push('<div class="note w">Does not run on this date'+(g.nextRun?(" · next: "+esc(fmtDate(g.nextRun))):"")+'</div>');
     else if(g.runNote) notes.push('<div class="note w">'+esc(g.runNote)+'</div>');
     g.alts.slice(0,1).forEach(a=>notes.push('<div class="note ok">'+esc(a.cls)+' confirmed another way: '+esc(a.text)+(a.fare?" ("+fmtINR(a.fare)+")":"")+'</div>'));
-    if(g.errText) notes.push('<div class="note w">'+esc(g.errText)+'</div>');
+    if(g.errText) notes.push('<div class="note w">'+esc(g.errText)+(g.retryable?' <button type="button" class="linkbtn" data-retry="'+esc(g.no)+'">Retry</button>':'')+'</div>');
     card.innerHTML=
       '<div class="tc-time">'+
         '<div class="tt"><span class="time big">'+(g.dep!=null?fmtHM(g.dep):"—")+'</span><span class="arrow">→</span><span class="time big">'+(arrAbs!=null?fmtHM(arrAbs):"—")+'</span>'+(plus>0?'<span class="plus">+'+plus+'</span>':"")+'</div>'+
@@ -937,6 +955,7 @@ $("form").addEventListener("submit",e=>{ e.preventDefault(); search(); });
 document.addEventListener("click",e=>{
   const sb=e.target.closest("[data-sort]"); if(sb){ state.sort=sb.dataset.sort; render(); return; }
   const fb=e.target.closest("[data-show]"); if(fb){ state.show=fb.dataset.show; render(); return; }
+  const rt=e.target.closest("[data-retry]"); if(rt){ retryTrains([rt.dataset.retry]); return; }
   const rb=e.target.closest("[data-rate]"); if(rb){ const no=rb.dataset.no, n=+rb.dataset.rate; if(state.ratings[no]===n) delete state.ratings[no]; else state.ratings[no]=n; saveRatings(); render(); }
 });
 $("cls").addEventListener("change",()=>{ if(state.example){ state.rows=[]; loadExample(); render(); } });

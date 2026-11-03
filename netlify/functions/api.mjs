@@ -75,14 +75,20 @@ async function upstream(path, params) {
   const url = new URL(BASE + path);
   Object.entries(params || {}).forEach(([k, v]) => { if (v != null && v !== "") url.searchParams.set(k, v); });
   let res;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     try {
       res = await fetch(url, { headers: { Authorization: "Bearer " + key, accept: "application/json" }, signal: AbortSignal.timeout(12000) });
     } catch {
-      if (attempt === 0) { await new Promise((r) => setTimeout(r, 400)); continue; }
+      if (attempt < 2) { await new Promise((r) => setTimeout(r, 500 + attempt * 700)); continue; }
       throw new Upstream(503, "UPSTREAM_DOWN", "The railway data service did not respond.");
     }
-    if ((res.status === 429 || res.status >= 500) && attempt === 0) { await new Promise((r) => setTimeout(r, 600)); continue; }
+    if (res.status === 429 && attempt < 3) {
+      const ra = Number(res.headers.get("retry-after"));
+      const wait = Math.min(Number.isFinite(ra) && ra > 0 ? ra * 1000 : 1200 * (attempt + 1) + Math.random() * 600, 6000);
+      await new Promise((r) => setTimeout(r, wait));
+      continue;
+    }
+    if (res.status >= 500 && attempt < 2) { await new Promise((r) => setTimeout(r, 700 + attempt * 800)); continue; }
     break;
   }
   let body = null;
@@ -152,17 +158,22 @@ export default async (req) => {
       }
       let cls = carried.length ? carried : (wanted.length ? wanted.filter((c) => ["1A", "2A", "3A", "CC", "SL"].includes(c)) : ["SL", "3A", "2A", "1A"]);
       if (wanted.length) cls = cls.filter((c) => wanted.includes(c));
-      const seats = await Promise.all(cls.map(async (c) => {
-        try {
-          const a = await getAvailability(train, from, to, date, c, quota);
-          at = Math.max(at, a.cachedAt);
-          return { class: c, status: a.data.status, fare: fares[c] ?? null };
-        } catch (e) {
-          if (e instanceof Upstream && BLOCKING.has(e.code)) throw e;
-          return { class: c, status: null, fare: fares[c] ?? null, error: (e && e.code) || "ERROR" };
-        }
-      }));
-      return json({ ok: true, data: { fares, classes: cls, seats, known: carried.length > 0 }, cachedAt: at });
+      at = 0;
+      const seats = [];
+      for (let i = 0; i < cls.length; i += 2) {
+        const part = await Promise.all(cls.slice(i, i + 2).map(async (c) => {
+          try {
+            const a = await getAvailability(train, from, to, date, c, quota);
+            at = Math.max(at, a.cachedAt);
+            return { class: c, status: a.data.status, fare: fares[c] ?? null };
+          } catch (e) {
+            if (e instanceof Upstream && BLOCKING.has(e.code)) throw e;
+            return { class: c, status: null, fare: fares[c] ?? null, error: (e && e.code) || "ERROR" };
+          }
+        }));
+        seats.push(...part);
+      }
+      return json({ ok: true, data: { fares, classes: cls, seats, known: carried.length > 0 }, cachedAt: at || null });
     }
 
     if (route === "availability") {
