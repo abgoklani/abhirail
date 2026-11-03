@@ -288,6 +288,18 @@ input[type="date"]::-webkit-date-and-time-value,input[type="time"]::-webkit-date
  form.search .f-class{grid-column:1/-1 !important;grid-row:5 !important}
  form.search .row2{grid-column:1/-1 !important;grid-row:6 !important} }
 .linkbtn{background:none;border:0;padding:0 0 0 6px;font:inherit;font-weight:700;color:inherit;text-decoration:underline;cursor:pointer}
+.stalebar{position:sticky;top:8px;z-index:15;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:#2a1d08;border:1px solid #5a3f12;color:#f5d9a8;border-radius:10px;padding:12px 14px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.stalebar p{margin:0;max-width:70ch}
+body.is-stale .board,body.is-stale .summary{opacity:.45;filter:grayscale(.4)}
+.emptycard{background:var(--surface);border:1px solid #232323;border-radius:10px;padding:22px 20px;display:flex;flex-direction:column;gap:8px}
+.emptycard .eh{font-family:var(--font-display);font-weight:700;font-size:18px}
+.emptycard .es{color:var(--muted);max-width:62ch}
+.recent{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:flex;flex-direction:column;align-items:flex-start;gap:2px;background:#101010;border:1px solid #2e2e2e;border-radius:10px;padding:9px 12px;color:var(--ink);font:inherit;cursor:pointer;text-align:left}
+.chip:hover{border-color:var(--accent)}
+.chip small{color:var(--muted);font-size:12px}
+@media (max-width:760px){ .stalebar .btn{width:100%} .chip{width:100%} }
 </style>
 </head>
 <body>
@@ -304,25 +316,25 @@ input[type="date"]::-webkit-date-and-time-value,input[type="time"]::-webkit-date
   <form class="search" id="form" autocomplete="off" novalidate>
     <div class="field f-from">
       <label for="from">From</label>
-      <input id="from" placeholder="City or station code" value="Kanpur">
+      <input id="from" placeholder="City or station code">
       <div class="sugg" id="fromSugg" hidden></div>
     </div>
     <button type="button" class="swap" id="swap" aria-label="Swap from and to">⇄</button>
     <div class="field f-to">
       <label for="to">To</label>
-      <input id="to" placeholder="City or station code" value="Delhi">
+      <input id="to" placeholder="City or station code">
       <div class="sugg" id="toSugg" hidden></div>
     </div>
     <div class="field f-date">
       <label for="date">Date</label>
-      <input id="date" type="date" value="2026-11-16">
+      <input id="date" type="date">
     </div>
     <div class="field f-time">
       <span class="lbl" id="timeLbl">Departs between</span>
       <div class="timepair" role="group" aria-labelledby="timeLbl">
         <input id="tStart" type="time" value="00:00" aria-label="Earliest departure">
         <span>to</span>
-        <input id="tEnd" type="time" value="08:00" aria-label="Latest departure">
+        <input id="tEnd" type="time" value="23:59" aria-label="Latest departure">
       </div>
     </div>
     <div class="field f-class">
@@ -359,6 +371,7 @@ input[type="date"]::-webkit-date-and-time-value,input[type="time"]::-webkit-date
   <div id="notices"></div>
   <div class="progress" id="progress" hidden><span id="progText">Finding trains…</span><div class="bar"><i id="progBar"></i></div></div>
 
+  <div class="stalebar" id="stale" hidden></div>
   <div class="summary" id="summary"></div>
 
   <div class="toolbar">
@@ -570,7 +583,7 @@ async function initApi(){
     const h = await api("health");
     state.apiReady = true; state.keySet = !!h.keySet;
     if(h.keySet) setConn("on","Live data ready");
-    else { setConn("off","Setup needed"); notice("warn","Live data is not set up yet","Add the IRCTC_DEV_API_KEY in Netlify → Site configuration → Environment variables, then redeploy. The example below stays visible."); }
+    else { setConn("off","Setup needed"); notice("warn","Live data is not set up yet","Add the IRCTC_DEV_API_KEY in Netlify → Site configuration → Environment variables, then redeploy."); }
   }catch(e){
     state.apiReady = true; state.keySet = false;
     setConn("off","Live data unavailable");
@@ -613,7 +626,7 @@ function setupPlace(inputId,suggId,key){
     const my=++seq; timer=setTimeout(async()=>{ const r=await placeOptions(q); if(my!==seq) return; items=r; act=-1; render(); },320); });
   inp.addEventListener("keydown",e=>{ if(box.hidden) return; if(e.key==="ArrowDown"){act=Math.min(items.length-1,act+1);render();e.preventDefault();} else if(e.key==="ArrowUp"){act=Math.max(0,act-1);render();e.preventDefault();} else if(e.key==="Enter"&&act>=0){pick(items[act]);e.preventDefault();} else if(e.key==="Escape"){box.hidden=true;} });
   inp.addEventListener("blur",()=>setTimeout(()=>{box.hidden=true;},180));
-  function render(){ if(!items.length){box.hidden=true;return;} box.innerHTML=""; items.forEach((pl,i)=>{ const b=document.createElement("button"); b.type="button"; if(i===act) b.className="act";
+  function render(){ if(!items.length || document.activeElement!==inp){box.hidden=true;return;} box.innerHTML=""; items.forEach((pl,i)=>{ const b=document.createElement("button"); b.type="button"; if(i===act) b.className="act";
       b.innerHTML='<span>'+esc(pl.label)+'</span><small>'+esc(pl.kind==="city"?pl.codes.join(" · "):(pl.sub||""))+'</small>'; b.onmousedown=ev=>{ev.preventDefault();pick(pl);}; box.appendChild(b); }); box.hidden=false; }
   function pick(pl){ state[key]=pl; inp.value=pl.kind==="city"?pl.name:pl.name; box.hidden=true; saveForm(); }
 }
@@ -698,13 +711,14 @@ async function search(){
   if(state.searching) return;
   clearNotices();
   if(!state.apiReady){ notice("info","Still connecting","Give it a moment and press Search again."); return; }
-  if(!state.keySet){ notice("warn","Live data is not set up yet","Add the railway data key in Netlify, then redeploy. The example below stays visible."); return; }
+  if(!state.keySet){ notice("warn","Live data is not set up yet","Add the railway data key in Netlify, then redeploy."); return; }
   const date=$("date").value; const s=parseHM($("tStart").value)??0; const e=parseHM($("tEnd").value)??1439;
   if(!date){ notice("warn","Pick a date","Choose your travel date and search again."); return; }
   const todayIso=new Date(Date.now()+5.5*3600e3).toISOString().slice(0,10);
   if(date<todayIso){ notice("warn","That date has passed","Pick today or a later date."); return; }
   state.searching=true; $("go").disabled=true; $("go").textContent="Searching…";
-  state.example=false; state.rows=[]; state.pending=[];
+  state.example=false; state.rows=[]; state.pending=[]; hideStale();
+  $("fromSugg").hidden=true; $("toSugg").hidden=true;
   saveForm(); render();
   try{
     progress(true,"Finding stations…",0.05);
@@ -731,7 +745,8 @@ async function search(){
       trains.push(trainBase({no:n.no,name:n.name,type:n.type,fromCode:a[0],fromName:a[1],toCode:b[0],toName:b[1],dep,dur,date,classes:n.classes,fares:{},source:"new",runNote:n.runNote,probe:true}));
     });
     trains.sort((x,y)=>relDep(x.dep,s)-relDep(y.dep,s));
-    state.ctx={from,to,date,s,e,quota,total:trains.length,checkedAt:null};
+    state.ctx={from,to,date,s,e,quota,total:trains.length,checkedAt:null,startedAt:Date.now()};
+    pushRecent();
     if(pairs.length>MAX_PAIRS) notice("info","Searching the main stations only","This city pair has "+pairs.length+" station combinations. AbhiRail checks the first "+MAX_PAIRS+" to save data. Pick a specific station to search others.");
     if(!trains.length){ progress(false); render(); notice("info","No trains in this window","No trains leave "+(from.name)+" for "+(to.name)+" between "+fmtHM(s)+" and "+fmtHM(e)+" on "+fmtDate(date)+". Widen the time window or try nearby dates."); }
     else{
@@ -865,7 +880,7 @@ function render(){
   const list=all.filter(g=> state.show==="all" || (state.show==="confirmed" ? g.tiles.some(t=>t.st.pct===100) : (g.bestPct!=null && g.bestPct>=60)) );
   const box=$("rows"); box.innerHTML="";
   if(!list.length){
-    box.innerHTML='<div class="empty">'+(state.searching?"Looking for trains…":(all.length?"No trains match this filter. Choose All to see every train.":"Search to see trains and seat status."))+'</div>';
+    box.innerHTML = state.searching ? '<div class="empty">Looking for trains…</div>' : (all.length ? '<div class="empty">No trains match this filter. Choose All to see every train.</div>' : emptyState());
   }
   list.forEach(g=>{
     const card=document.createElement("article");
@@ -915,6 +930,7 @@ function render(){
 }
 function titleCase(s){ s=String(s||""); if(s!==s.toUpperCase()) return s; return s.toLowerCase().replace(/\b([a-z])/g,m=>m.toUpperCase()).replace(/\b(Sf|Ac|Spl|Ndls|Bkn|Rnc|Rjpb|Dbg|Ssb|Irctc|Ltt|Bdts|Csmt|Cnb|Gct)\b/g,m=>m.toUpperCase()); }
 function renderSummary(rows){
+  if(!rows.length && !state.searching){ $("summary").innerHTML=""; $("meta").textContent=""; return; }
   const el=$("summary");
   const ctx=state.ctx;
   const trainsN=new Set(rows.map(r=>r.no)).size;
@@ -939,6 +955,54 @@ function renderMore(){
   }
 }
 
+
+/* ---------- freshness and recent searches ---------- */
+const STALE_MS=10*60*1000;
+function istToday(){ return new Date(Date.now()+5.5*3600e3).toISOString().slice(0,10); }
+function initDate(){
+  const today=istToday(); const el=$("date");
+  el.min=today;
+  if(!el.value || el.value<today) el.value=addDays(today,1);
+}
+function loadRecent(){ try{ return JSON.parse(localStorage.getItem("abhirail-recent")||"[]")||[]; }catch(e){ return []; } }
+function pushRecent(){
+  try{
+    const item={from:state.from,to:state.to,fromText:$("from").value,toText:$("to").value,cls:$("cls").value,quota:$("quota").value,tStart:$("tStart").value,tEnd:$("tEnd").value};
+    const key=r=>[r.fromText,r.toText,r.cls,r.tStart,r.tEnd].join("|").toLowerCase();
+    const list=[item,...loadRecent().filter(r=>key(r)!==key(item))].slice(0,5);
+    localStorage.setItem("abhirail-recent",JSON.stringify(list));
+  }catch(e){}
+}
+function emptyState(){
+  const rec=loadRecent();
+  const clsName={AC:"All AC",ANY:"Any class"};
+  const chips=rec.map((r,i)=>'<button type="button" class="chip" data-recent="'+i+'"><b>'+esc(r.fromText)+' → '+esc(r.toText)+'</b><small>'+esc(clsName[r.cls]||r.cls)+' · '+esc(r.tStart)+'–'+esc(r.tEnd)+'</small></button>').join("");
+  return '<div class="emptycard"><div class="eh">Pick your route and date, then search.</div><div class="es">AbhiRail checks every train in your time window and shows live seats, fares and the chance a waitlist clears.</div>'+
+    (rec.length? '<div class="recent"><span class="tlabel">Recent searches</span><div class="chips">'+chips+'</div></div>' : '')+'</div>';
+}
+function useRecent(i){
+  const r=loadRecent()[i]; if(!r) return;
+  state.from=r.from||null; state.to=r.to||null;
+  $("from").value=r.fromText||""; $("to").value=r.toText||"";
+  if(r.cls) $("cls").value=r.cls; if(r.quota) $("quota").value=r.quota; if(r.tStart) $("tStart").value=r.tStart; if(r.tEnd) $("tEnd").value=r.tEnd;
+  initDate(); search();
+}
+function hideStale(){ const el=$("stale"); el.hidden=true; el.innerHTML=""; document.body.classList.remove("is-stale"); }
+function checkStale(){
+  if(state.searching || !state.ctx || !state.rows.length) return;
+  if(state.ctx.date<istToday()){
+    state.rows=[]; state.ctx=null; hideStale(); render(); clearNotices();
+    notice("info","That travel date has passed","Pick a new date and search again.");
+    initDate(); return;
+  }
+  const at=state.ctx.checkedAt||state.ctx.startedAt; if(!at) return;
+  if(Date.now()-at < STALE_MS) return;
+  const el=$("stale");
+  el.innerHTML='<p><strong>These seats were checked '+esc(ago(at))+'.</strong> Seat status changes quickly, so refresh before you book.</p><button type="button" class="btn primary small" id="staleRefresh">Refresh seats</button>';
+  el.hidden=false; document.body.classList.add("is-stale");
+  $("staleRefresh").onclick=()=>{ hideStale(); search(); };
+}
+
 /* ---------- example ---------- */
 function loadExample(){
   state.ctx={from:{name:"Kanpur"},to:{name:"Delhi"},date:"2026-11-16",s:0,e:480,quota:"GN",checkedAt:EXAMPLE.checkedAt};
@@ -956,15 +1020,19 @@ document.addEventListener("click",e=>{
   const sb=e.target.closest("[data-sort]"); if(sb){ state.sort=sb.dataset.sort; render(); return; }
   const fb=e.target.closest("[data-show]"); if(fb){ state.show=fb.dataset.show; render(); return; }
   const rt=e.target.closest("[data-retry]"); if(rt){ retryTrains([rt.dataset.retry]); return; }
+  const rc=e.target.closest("[data-recent]"); if(rc){ useRecent(+rc.dataset.recent); return; }
   const rb=e.target.closest("[data-rate]"); if(rb){ const no=rb.dataset.no, n=+rb.dataset.rate; if(state.ratings[no]===n) delete state.ratings[no]; else state.ratings[no]=n; saveRatings(); render(); }
 });
-$("cls").addEventListener("change",()=>{ if(state.example){ state.rows=[]; loadExample(); render(); } });
 try{ const d=new Date(Date.now()+5.5*3600e3).toISOString().slice(0,10); $("date").min=d; }catch(e){}
-loadExample(); render();
+state.example=false;
 loadForm();
+initDate();
+render();
 initApi();
 if("serviceWorker" in navigator){ window.addEventListener("load",()=>{ navigator.serviceWorker.register("/sw.js").catch(()=>{}); }); }
-setInterval(()=>{ if(!state.searching) renderSummary(sortRows(state.rows)); },60000);
+setInterval(()=>{ if(!state.searching){ renderSummary(sortRows(state.rows)); checkStale(); } },60000);
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden) checkStale(); });
+window.addEventListener("pageshow",()=>checkStale());
 })();
 </script>
 </body>
