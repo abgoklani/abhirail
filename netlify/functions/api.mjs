@@ -69,7 +69,7 @@ async function cached(kind, key, loader) {
   return { data, cachedAt: now };
 }
 
-async function upstream(path, params, deadline) {
+async function upstream(path, params, deadline, noRetry429) {
   const key = env("IRCTC_DEV_API_KEY");
   if (!key) throw new Upstream(500, "NO_KEY", "The railway data key is not set up yet.");
   const url = new URL(BASE + path);
@@ -85,7 +85,7 @@ async function upstream(path, params, deadline) {
       if (attempt === 0 && left() > 4000) { await new Promise((r) => setTimeout(r, 400)); continue; }
       throw new Upstream(504, "TIMEOUT", "The railway data service is slow right now.");
     }
-    if (res.status === 429 && attempt < 2) {
+    if (res.status === 429 && attempt < 2 && !noRetry429) {
       const ra = Number(res.headers.get("retry-after"));
       const wait = Math.min(Number.isFinite(ra) && ra > 0 ? ra * 1000 : 1000 * (attempt + 1) + Math.random() * 500, 3000);
       if (left() - wait < 3000) break;
@@ -116,7 +116,7 @@ function getFare(train, from, to, quota, deadline) {
 
 function getAvailability(train, from, to, date, cls, quota, deadline) {
   return cached("availability", [train, from, to, date, cls, quota].join("-"), async () => {
-    const b = await upstream("/api/v1/trains/" + train + "/availability", { from, to, date: toDMY(date), class: cls, quota }, deadline);
+    const b = await upstream("/api/v1/trains/" + train + "/availability", { from, to, date: toDMY(date), class: cls, quota }, deadline, true);
     const list = Array.isArray(b.availability) ? b.availability : (b.data && b.data.availability) || [];
     const now = Math.floor(Date.now() / 1000);
     await Promise.all(list.map(async (a) => {
@@ -134,7 +134,7 @@ export default async (req) => {
   const route = url.pathname.replace(/^\/api\/?/, "").replace(/\/$/, "");
   const q = url.searchParams;
   if (req.method !== "GET") return fail(405, "METHOD", "Only GET is supported.");
-  if (route === "health") return json({ ok: true, keySet: Boolean(env("IRCTC_DEV_API_KEY")) });
+  if (route === "health") return json({ ok: true, keySet: Boolean(env("IRCTC_DEV_API_KEY")), seatsPerMinute: Number(env("SEATS_PER_MINUTE")) || 9 });
 
   try {
     if (route === "stations") {
