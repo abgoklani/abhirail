@@ -1,4 +1,5 @@
 import { getStore } from "@netlify/blobs";
+import { createHash, timingSafeEqual } from "node:crypto";
 
 const BASE = "https://api.irctc.dev";
 const TTL = {
@@ -174,12 +175,23 @@ function getAvailability(train, from, to, date, cls, quota, deadline, maxAge) {
   }, { ttl: availTtl(date), maxAge });
 }
 
+// Optional access code (Netlify env ACCESS_CODE). The page sends it in the x-abhirail-code header.
+function codeOk(req) {
+  const want = env("ACCESS_CODE");
+  if (!want) return true;
+  const got = (req.headers.get("x-abhirail-code") || "").trim().toLowerCase();
+  const h = (x) => createHash("sha256").update(String(x)).digest();
+  return timingSafeEqual(h(got), h(want.trim().toLowerCase()));
+}
+
 export default async (req) => {
   const url = new URL(req.url);
   const route = url.pathname.replace(/^\/api\/?/, "").replace(/\/$/, "");
   const q = url.searchParams;
   if (req.method !== "GET") return fail(405, "METHOD", "Only GET is supported.");
-  if (route === "health") return json({ ok: true, keySet: Boolean(env("IRCTC_DEV_API_KEY")), seatsPerMinute: Number(env("SEATS_PER_MINUTE")) || 9, limitSeen });
+  const unlocked = codeOk(req);
+  if (route === "health") return json({ ok: true, keySet: Boolean(env("IRCTC_DEV_API_KEY")), seatsPerMinute: Number(env("SEATS_PER_MINUTE")) || 9, codeRequired: Boolean(env("ACCESS_CODE")), codeOk: unlocked, limitSeen: unlocked ? limitSeen : null });
+  if (!unlocked) return fail(401, "CODE_REQUIRED", "Enter the access code to use AbhiRail.");
 
   try {
     if (route === "stations") {

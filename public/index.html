@@ -302,6 +302,14 @@ th{background:#111;position:sticky;top:0}
 .bk-note{font-size:12px;color:var(--muted);margin:6px 0 0}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:60;background:#f5f5f5;color:#111;font-weight:600;font-size:14px;padding:10px 16px;border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.4)}
 .toast[hidden]{display:none}
+.gate{position:fixed;inset:0;z-index:70;background:#000;display:flex;align-items:center;justify-content:center;padding:24px}
+.gate[hidden]{display:none}
+.gate-p{width:100%;max-width:360px;display:flex;flex-direction:column;gap:12px;text-align:center;align-items:stretch}
+.gate-p .mark{width:72px;height:auto;margin:0 auto 4px}
+.gate-p h2{margin:0;font-size:22px}
+.gate-p p{margin:0;color:var(--muted);font-size:14px}
+.gate-p input{font-size:18px;padding:12px 14px;border-radius:10px;border:1px solid #333;background:#111;color:inherit;text-align:center;letter-spacing:.06em}
+.gate-err{min-height:18px;color:#ff8a8a;font-size:13px}
 .addtrain{margin:14px 0 4px;border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:14px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between}
 .addtrain[hidden]{display:none}
 .addtrain .at-t{display:flex;flex-direction:column;gap:2px;min-width:220px;flex:1}
@@ -436,6 +444,16 @@ body.is-stale .board,body.is-stale .summary{opacity:.45;filter:grayscale(.4)}
 
   <div class="board" id="rows" aria-live="polite"></div>
   <div id="moreWrap"></div>
+  <div class="gate" id="gate" hidden>
+    <form class="gate-p" id="gateForm" autocomplete="off">
+      <img class="mark" src="/logo-mark.png" alt="" width="80" height="68">
+      <h2>AbhiRail is private</h2>
+      <p>Enter the access code you were given. You only need to do this once on this phone.</p>
+      <input id="gateCode" type="text" inputmode="text" autocapitalize="none" spellcheck="false" placeholder="Access code" aria-label="Access code">
+      <button class="btn primary" id="gateBtn" type="submit">Unlock</button>
+      <div class="gate-err" id="gateErr" role="alert"></div>
+    </form>
+  </div>
   <div class="sheet" id="bookSheet" hidden>
     <div class="sheet-bg" data-close="1"></div>
     <div class="sheet-p" role="dialog" aria-modal="true" aria-labelledby="bkTitle">
@@ -680,9 +698,10 @@ async function api(path, params){
   const u = new URL("/api/" + path, location.origin);
   Object.entries(params||{}).forEach(([k,v])=>{ if(v!=null) u.searchParams.set(k,v); });
   let res, body=null;
-  try{ res = await fetch(u, {headers:{accept:"application/json"}, signal: AbortSignal.timeout ? AbortSignal.timeout(28000) : undefined}); }catch(e){ const er=new Error(e && (e.name==="TimeoutError"||e.name==="AbortError") ? "timeout" : "offline"); er.code=(e && (e.name==="TimeoutError"||e.name==="AbortError")) ? "TIMEOUT" : (navigator.onLine===false ? "OFFLINE" : "TIMEOUT"); throw er; }
+  try{ res = await fetch(u, {headers:Object.assign({accept:"application/json"}, accessCode()? {"x-abhirail-code":accessCode()} : {}), signal: AbortSignal.timeout ? AbortSignal.timeout(28000) : undefined}); }catch(e){ const er=new Error(e && (e.name==="TimeoutError"||e.name==="AbortError") ? "timeout" : "offline"); er.code=(e && (e.name==="TimeoutError"||e.name==="AbortError")) ? "TIMEOUT" : (navigator.onLine===false ? "OFFLINE" : "TIMEOUT"); throw er; }
   try{ body = await res.json(); }catch(e){}
   if(state.debug){ state.debugLog.unshift({at:new Date().toLocaleTimeString(), path:u.pathname+u.search, status:res.status, body}); state.debugLog=state.debugLog.slice(0,30); renderDebug(); }
+  if(res.status===401 && body && body.code==="CODE_REQUIRED" && path!=="health"){ setAccessCode(""); await askCode("The access code has changed. Enter the new one."); return api(path, params); }
   if(!res.ok || !body || body.ok===false){ if(body && body.retryable && res.status===503){ await sleep(900); return api(path, params); } throw apiError(res.status, body); }
   return body;
 }
@@ -703,9 +722,34 @@ function errCopy(err){
   }
 }
 function setConn(kind,text){ $("connDot").className="dot "+kind; $("connText").textContent=text; }
+/* ---------- access code ---------- */
+const CODE_KEY="abhirail-code";
+function accessCode(){ try{ return localStorage.getItem(CODE_KEY)||""; }catch(e){ return ""; } }
+function setAccessCode(c){ try{ c? localStorage.setItem(CODE_KEY,c) : localStorage.removeItem(CODE_KEY); }catch(e){} }
+(function codeFromLink(){ try{ const u=new URL(location.href); const c=u.searchParams.get("code"); if(c){ setAccessCode(c.trim().toLowerCase()); u.searchParams.delete("code"); history.replaceState(null,"",u.pathname+(u.search||"")+u.hash); } }catch(e){} })();
+let gateWait=null;
+function askCode(msg){
+  if(gateWait) return gateWait;
+  const g=$("gate"); g.hidden=false; document.body.style.overflow="hidden";
+  $("gateErr").textContent=msg||""; setTimeout(()=>$("gateCode").focus(),50);
+  gateWait=new Promise(resolve=>{
+    $("gateForm").onsubmit=async e=>{
+      e.preventDefault();
+      const c=$("gateCode").value.trim().toLowerCase(); if(!c){ $("gateErr").textContent="Enter the code."; return; }
+      const b=$("gateBtn"); b.disabled=true; b.textContent="Checking…";
+      setAccessCode(c);
+      let ok=false; try{ ok=!!(await api("health")).codeOk; }catch(err){}
+      b.disabled=false; b.textContent="Unlock";
+      if(!ok){ setAccessCode(""); $("gateErr").textContent="That code isn't right. Check with the person who shared AbhiRail."; $("gateCode").select(); return; }
+      g.hidden=true; document.body.style.overflow=""; gateWait=null; resolve();
+    };
+  });
+  return gateWait;
+}
 async function initApi(){
   try{
-    const h = await api("health");
+    let h = await api("health");
+    if(h.codeRequired && !h.codeOk){ setConn("off","Locked"); await askCode(accessCode()? "That code isn't right anymore. Enter the current one." : ""); h = await api("health"); }
     state.apiReady = true; state.keySet = !!h.keySet; state.seatsPerMinute = Number(h.seatsPerMinute)||9;
     if(h.keySet) setConn("on","Live data ready");
     else { setConn("off","Setup needed"); notice("warn","Live data is not set up yet","Add the IRCTC_DEV_API_KEY in Netlify → Site configuration → Environment variables, then redeploy."); }
