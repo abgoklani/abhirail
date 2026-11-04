@@ -5,7 +5,7 @@ pages_build_output_dir = "public"
 compatibility_date = "2026-11-01"
 
 [vars]
-SEATS_PER_MINUTE = "60"
+SEATS_PER_MINUTE = "30"
 
 [[d1_databases]]
 binding = "DB"

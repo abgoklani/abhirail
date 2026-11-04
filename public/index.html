@@ -655,17 +655,17 @@ function tierOf(name,type,no){
 
 /* ---------- API ---------- */
 const CITIES = [
-  {name:"Delhi", codes:["NDLS","NZM","DLI","ANVT"], extra:["DEE","DEC"]},
+  {name:"Delhi", codes:["NDLS","NZM","DLI","ANVT"], extra:["DEE","DEC","DSA","DSJ"]},
   {name:"Mumbai", codes:["CSMT","LTT","DR","MMCT","BDTS","DDR"], extra:["TNA","KYN","PNVL"]},
   {name:"Kolkata", codes:["HWH","SDAH","KOAA"], extra:["SRC"]},
   {name:"Chennai", codes:["MAS","MS"], extra:["MSB","PER"]},
   {name:"Bengaluru", codes:["SBC","SMVB","YPR"], extra:["BNC","KJM"]},
   {name:"Hyderabad", codes:["SC","HYB","KCG"]},
-  {name:"Lucknow", codes:["LKO","LJN"]},
-  {name:"Kanpur", codes:["CNB"], extra:["CPA"]},
-  {name:"Prayagraj", codes:["PRYJ","PCOI"], extra:["NYN","SFG"]},
+  {name:"Lucknow", codes:["LKO","LJN"], extra:["GTNR","BNZ","LC","ASH"]},
+  {name:"Kanpur", codes:["CNB"], extra:["CPA","GOY"]},
+  {name:"Prayagraj", codes:["PRYJ","PCOI"], extra:["NYN","SFG","PRRB","PFM"]},
   {name:"Varanasi", codes:["BSB","BSBS"], extra:["BCY"]},
-  {name:"Patna", codes:["PNBE","PPTA","RJPB"]},
+  {name:"Patna", codes:["PNBE","PPTA","RJPB"], extra:["DNR"]},
   {name:"Jaipur", codes:["JP"]},
   {name:"Ahmedabad", codes:["ADI"]},
   {name:"Pune", codes:["PUNE"]},
@@ -675,7 +675,7 @@ const CITIES = [
   {name:"Jhansi", codes:["VGLJ"]},
   {name:"Guwahati", codes:["GHY","KYQ"]}
 ];
-const MAX_PAIRS = 40;
+const MAX_PAIRS = 48;
 // Main stations of a city are paired with each other; extra stations (Thane, Kalyan, Naini…) are paired with the other side's main stations.
 function placeCodes(pl){
   if(pl && pl.kind==="city"){ const c=CITIES.find(x=>x.name===pl.name); if(c) return {main:c.codes.slice(),extra:(c.extra||[]).slice()}; }
