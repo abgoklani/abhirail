@@ -21,6 +21,15 @@ function makeStore(db) {
         return r ? JSON.parse(r.v) : null;
       } catch { return null; }
     },
+    async list(prefix) {
+      if (!db) return [...memory.keys()].filter((k) => k.startsWith(prefix));
+      try {
+        await prepare();
+        const now = Math.floor(Date.now() / 1000);
+        const r = await db.prepare("SELECT k FROM kv WHERE k LIKE ? AND exp > ? ORDER BY exp DESC LIMIT 1500").bind(prefix + "%", now).all();
+        return (r.results || []).map((x) => x.k);
+      } catch { return []; }
+    },
     async set(k, v) {
       if (!db) { memory.set(k, JSON.stringify(v)); if (memory.size > 2000) memory.delete(memory.keys().next().value); return; }
       pending.set(k, v);

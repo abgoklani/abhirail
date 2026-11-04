@@ -131,7 +131,37 @@ function getFare(train, from, to, quota, deadline) {
 const HIST_KEEP = 40, HIST_GAP = 6 * 3600;
 const istDay = (offset = 0) => new Date(Date.now() + 5.5 * 3600e3 + offset * 864e5).toISOString().slice(0, 10);
 
-async function getAvailability(train, from, to, date, cls, quota, deadline, maxAge) {
+/* Outcomes: when a journey date drops out of the window, AbhiRail keeps how far that date's
+   waitlist had cleared at the last snapshot before charting (F = waitlisted tickets confirmed).
+   A new booking whose booking position is B was confirmed on past dates where F >= B. */
+const wlNums = (s) => [...String(s || "").toUpperCase().matchAll(/(?:[A-Z]*WL)\s*(\d+)/g)].map((x) => +x[1]);
+const weekday = (iso) => new Date(iso + "T12:00:00Z").getUTCDay();
+function finalizeDate(row, d) {
+  const h = row.h[d] || [];
+  if (!h.length) return;
+  const last = h[h.length - 1];
+  const chartDay = Date.parse(d + "T00:00:00+05:30") / 1000;
+  if (last[0] < chartDay - 2 * 86400) return; // no snapshot close enough to charting
+  const maxB = Math.max(0, ...h.map((x) => wlNums(x[1])[0] || 0));
+  const s = String(last[1]).toUpperCase();
+  let F = null;
+  if (/AVAIL|CNF/.test(s)) F = maxB; // every waitlisted ticket cleared
+  else if (!/REGRET/.test(s)) { const n = wlNums(s); if (n.length >= 2) F = n[0] - n[n.length - 1]; }
+  if (F == null || maxB === 0) return;
+  row.o = (row.o || []).filter((x) => x[0] !== d);
+  row.o.push([d, weekday(d), F, maxB]);
+  if (row.o.length > 60) row.o = row.o.slice(-60);
+}
+function empirical(outcomes, status, date) {
+  const n = wlNums(status);
+  if (!outcomes || !outcomes.length || n.length < 1 || /REGRET/i.test(status)) return null;
+  const B = n[0], wd = weekday(date);
+  let yes = 0, all = 0, same = 0;
+  outcomes.forEach((o) => { const w = o[1] === wd ? 2 : 1; all += w; if (o[1] === wd) same++; if (o[2] >= B) yes += w; });
+  return { n: outcomes.length, same, p: Math.round((yes / all) * 100) / 100 };
+}
+
+async function getAvailability(train, from, to, date, cls, quota, deadline, maxAge, byCollector) {
   const key = "av/" + [train, from, to, cls, quota].join("-");
   let row = null;
   try { row = await store.get(key); } catch {}
@@ -144,7 +174,7 @@ async function getAvailability(train, from, to, date, cls, quota, deadline, maxA
     const ttl = hit[2] ? 20 * 60 : availTtl(date);
     if (age < ttl && !(maxAge && age > maxAge)) {
       if (hit[2]) throw new Upstream(404, hit[2], "No live seat data for this train.");
-      return { data: { status: hit[1] }, cachedAt: hit[0], hist: row.h[date] || [] };
+      return { data: { status: hit[1] }, cachedAt: hit[0], hist: row.h[date] || [], outcomes: row.o || [] };
     }
   }
   let b;
@@ -175,11 +205,13 @@ async function getAvailability(train, from, to, date, cls, quota, deadline, maxA
   });
   if (!row.d[date]) row.d[date] = [now, null, null];
   const oldest = istDay(-2);
+  Object.keys(row.h).forEach((d) => { if (d < istDay(0)) finalizeDate(row, d); });
   Object.keys(row.d).forEach((d) => { if (d < oldest) delete row.d[d]; });
   Object.keys(row.h).forEach((d) => { if (d < oldest) delete row.h[d]; });
-  row.exp = now + 30 * 86400;
+  // exp marks the last time a person (not the collector) looked at this train; the collector follows rows for 30 days after that.
+  if (!byCollector || !row.exp) row.exp = now + 30 * 86400;
   try { await store.set(key, row); } catch {}
-  return { data: { status }, cachedAt: now, hist: row.h[date] || [] };
+  return { data: { status }, cachedAt: now, hist: row.h[date] || [], outcomes: row.o || [] };
 }
 
 // Optional access code (Netlify env ACCESS_CODE). The page sends it in the x-abhirail-code header.
@@ -194,6 +226,52 @@ async function codeOk(req) {
   return diff === 0;
 }
 
+/* Daily collector (called by a scheduled GitHub Action at night). Re-checks every train, class
+   and quota the family checked in the last 30 days, once a day, using the nearest journey date
+   it runs on; each answer covers ~14 dates. Capped by COLLECT_DAILY (default 300) checks a day.
+   It only ever touches already-searched trains, so calling it needs no access code. */
+async function collect() {
+  if (!store.list) return json({ ok: false, code: "UNSUPPORTED", message: "Collector needs the D1 store." }, 501);
+  const today = istDay(0), budget = Number(env("COLLECT_DAILY")) || 300;
+  let st = null;
+  try { st = await store.get("collect/state"); } catch {}
+  if (!st || st.day !== today) st = { day: today, done: [], calls: 0 };
+  const done = new Set(st.done);
+  if (st.calls >= budget) return json({ ok: true, finished: true, calls: st.calls, reason: "daily budget used" });
+  const keys = (await store.list("av/")).filter((k) => !done.has(k));
+  if (!keys.length) return json({ ok: true, finished: true, calls: st.calls });
+  const started = Date.now();
+  let checked = 0, paused = false;
+  for (const k of keys) {
+    if (checked >= 12 || st.calls >= budget || Date.now() - started > 40000) break;
+    const [train, from, to, cls, quota] = k.slice(3).split("-");
+    let row = null;
+    try { row = await store.get(k); } catch {}
+    done.add(k);
+    if (!row || !TRAIN.test(train) || !CLASSES.has(cls)) continue;
+    // Start from tomorrow so every upcoming date gets a snapshot close to charting;
+    // if the train doesn't run tomorrow, fall back to the nearest date it is known to run.
+    const known = Object.keys(row.d || {}).filter((d) => d > istDay(1) && row.d[d][1]).sort();
+    const tries = [istDay(1)].concat(known.slice(0, 1));
+    for (const day of tries) {
+      try {
+        const a = await getAvailability(train, from, to, day, cls, quota, Date.now() + 15000, 3 * 3600, true);
+        if (a.cachedAt >= Math.floor(started / 1000)) { st.calls++; checked++; await new Promise((r) => setTimeout(r, 2100)); }
+        break;
+      } catch (e) {
+        if (e instanceof Upstream && (e.code === "RATE_LIMIT_EXCEEDED" || BLOCKING.has(e.code))) { done.delete(k); paused = true; break; }
+        st.calls++; checked++;
+        if (!(e instanceof Upstream && (e.status === 404 || UNAVAILABLE.has(e.code)))) break;
+      }
+    }
+    if (paused) break;
+  }
+  st.done = [...done];
+  try { await store.set("collect/state", Object.assign(st, { exp: Math.floor(Date.now() / 1000) + 3 * 86400 })); } catch {}
+  const left = keys.filter((k) => !done.has(k)).length;
+  return json({ ok: true, finished: left === 0 || st.calls >= budget, checked, calls: st.calls, left, paused });
+}
+
 export async function handle(req, ctx) {
   env = ctx.env;
   store = ctx.store;
@@ -203,7 +281,7 @@ export async function handle(req, ctx) {
   if (req.method !== "GET") return fail(405, "METHOD", "Only GET is supported.");
   const unlocked = await codeOk(req);
   if (route === "health") return json({ ok: true, keySet: Boolean(env("IRCTC_DEV_API_KEY")), seatsPerMinute: Number(env("SEATS_PER_MINUTE")) || 9, codeRequired: Boolean(env("ACCESS_CODE")), codeOk: unlocked, limitSeen: unlocked ? limitSeen : null });
-  if (!unlocked) return fail(401, "CODE_REQUIRED", "Enter the access code to use AbhiRail.");
+  if (!unlocked && route !== "collect") return fail(401, "CODE_REQUIRED", "Enter the access code to use AbhiRail.");
 
   try {
     if (route === "stations") {
@@ -249,6 +327,8 @@ export async function handle(req, ctx) {
             const a = await getAvailability(train, from, to, date, c, quota, deadline, maxAge);
             at = Math.max(at, a.cachedAt);
             seats[i] = { class: c, status: a.data.status, fare: fares[c] ?? null };
+            const emp = empirical(a.outcomes, a.data.status, date);
+            if (emp) seats[i].emp = emp;
             const h = a.hist || [];
             if (a.data.status && /WL/i.test(a.data.status) && h.length && Math.floor(Date.now() / 1000) - h[0][0] >= 6 * 3600) seats[i].since = h[0];
           } catch (e) {
@@ -262,6 +342,8 @@ export async function handle(req, ctx) {
       await Promise.all([worker(), worker(), worker()]);
       return json({ ok: true, data: { fares, classes: cls, seats, known: carried.length > 0, retryAfter: retryAfter || null }, cachedAt: at || null });
     }
+
+    if (route === "collect") return await collect();
 
     if (route === "schedule") {
       const train = q.get("train") || "";

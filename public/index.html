@@ -483,7 +483,7 @@ body.is-stale .board,body.is-stale .summary{opacity:.45;filter:grayscale(.4)}
   <div class="legend">
     <h2>How to read the chance</h2>
     <div><b>Available = 100%</b>A confirmed berth is open right now. Seats sell fast, so book soon. RAC means you can board and share a berth until one frees up.</div>
-    <div><b>Waitlist = estimate</b>A rule of thumb, not a measured prediction. It starts from the waitlist number, then adjusts for the class (1A and 2A have few berths, so a WL 3 in 1A is a weaker bet than WL 3 in 3A), the waitlist type (RLWL, PQWL and Tatkal clear less often than GNWL) how close the journey is, and how fast this train's waitlist is moving: how far it has already moved (GNWL 119/WL 60 means 59 waitlisted tickets ahead have been confirmed) and, once AbhiRail has seen the train before, how many places it has cleared per day since.</div>
+    <div><b>Waitlist = estimate</b>A rule of thumb, not a measured prediction. It starts from the waitlist number, then adjusts for the class (1A and 2A have few berths, so a WL 3 in 1A is a weaker bet than WL 3 in 3A), the waitlist type (RLWL, PQWL and Tatkal clear less often than GNWL) how close the journey is, and how fast this train's waitlist is moving: how far it has already moved (GNWL 119/WL 60 means 59 waitlisted tickets ahead have been confirmed) and, once AbhiRail has seen the train before, how many places it has cleared per day since. Every night AbhiRail re-checks the trains your family searches; after a few weeks the chance leans on each train's own track record: how often its waitlist cleared that far on past dates.</div>
     <div><b>New trains</b>Trains launched in the last few weeks, such as the Vande Bharat Sleeper, may not be in the live data yet. They appear with a "New" tag and a link to check seats on IRCTC.</div>
   </div>
 </div>
@@ -613,7 +613,7 @@ function movement(nums,since,d){
   }
   return out;
 }
-function readStatus(raw,cls,date,since){
+function readStatus(raw,cls,date,since,emp){
   const s=String(raw||"").toUpperCase().trim();
   if(!s) return {kind:"na",pct:null,label:"No data"};
   if(/^(AVAILABLE|AVL|CURR_AVBL)/.test(s)){ const m=s.match(/(\d+)/); return {kind:"ok",pct:100,label: m? ("Available · "+(+m[1])+" left") : "Available"}; }
@@ -627,8 +627,11 @@ function readStatus(raw,cls,date,since){
     if(d!=null){ if(d<=1) p*=0.6; else if(d<=3) p*=0.8; else if(d<=7) p*=0.92; }
     const mv=movement(nums,since,d);
     p=p*mv.factor; if(mv.trend!=null) p=(1-mv.weight)*p+mv.weight*mv.trend*tf;
-    p=Math.max(2,Math.min(92,Math.round(p)));
-    const why=[tname, cf>1?cls+" has few berths":null].concat(mv.notes,[d!=null&&d<=3?"little time left":null]).filter(Boolean).join(", ");
+    // Track record: how often this train, class and quota cleared this far on past dates (from the nightly collector).
+    let track=null;
+    if(emp && emp.n>=3){ const w=emp.n/(emp.n+4); p=(1-w)*p+w*emp.p*100; track="cleared this far on "+Math.round(emp.p*emp.n)+" of the last "+emp.n+" dates"; }
+    p=Math.max(2,Math.min(95,Math.round(p)));
+    const why=(track?[track]:[]).concat([tname, cf>1?cls+" has few berths":null],mv.notes,[d!=null&&d<=3?"little time left":null]).filter(Boolean).join(", ");
     return {kind: p>=60?"good":(p>=35?"warn":"bad"), pct:p, label:"Waitlist "+n, est:true, wl:n, why};
   }
   return {kind:"na",pct:null,label:raw};
@@ -827,9 +830,9 @@ function rowsFromBoard(t,board,checkedAt,alts){
   const list=(board&&board.length)? board : (t.classes||[]).map(c=>({classCode:c,status:null,fare:(t.fares||{})[c]}));
   list.forEach(b=>{
     if(want && !want.includes(b.classCode)) return;
-    const st = b.status==null ? {kind:"na",pct:null,label: t.noLive? "Check on IRCTC" : (checkedAt? "No seat data" : (state.searching? "Checking…" : "Not checked yet"))} : readStatus(b.status,b.classCode,t.date,b.since);
+    const st = b.status==null ? {kind:"na",pct:null,label: t.noLive? "Check on IRCTC" : (checkedAt? "No seat data" : (state.searching? "Checking…" : "Not checked yet"))} : readStatus(b.status,b.classCode,t.date,b.since,b.emp);
     const alt = pickAlt(alts,b.classCode,st);
-    out.push(Object.assign({},t,{cls:b.classCode,raw:b.status,since:b.since||null,st,fare:b.fare!=null?b.fare:((t.fares||{})[b.classCode]??null),checkedAt,alt}));
+    out.push(Object.assign({},t,{cls:b.classCode,raw:b.status,since:b.since||null,emp:b.emp||null,st,fare:b.fare!=null?b.fare:((t.fares||{})[b.classCode]??null),checkedAt,alt}));
   });
   const boardHad = board && board.length;
   if(!out.length && !boardHad){
@@ -963,7 +966,7 @@ async function checkOne(t,want){
   if(!seats.some(x=>x.status) && !failed.length && (t.probe || seats.length)){ setRows(t.no,rowsFromBoard(Object.assign({},(t.probe||!d.known)?t:tt,{noLive:true}),null,null,null)); return out; }
   if(!seats.length){ setRows(t.no, d.known? [] : rowsFromBoard(tt,null,at,null)); return out; }
   const prev=new Map(state.rows.filter(r0=>r0.no===t.no && r0.st && r0.st.pct!=null).map(r0=>[r0.cls,r0]));
-  let rows=rowsFromBoard(tt,seats.map(x=>({classCode:x.class,status:x.status,since:x.since||null,fare:x.fare??fares[x.class]??null})),at,null);
+  let rows=rowsFromBoard(tt,seats.map(x=>({classCode:x.class,status:x.status,since:x.since||null,emp:x.emp||null,fare:x.fare??fares[x.class]??null})),at,null);
   rows=rows.map(rw=> na.has(rw.cls)? Object.assign(rw,{st:{kind:"na",pct:null,label:"Check on IRCTC"},checkedAt:null}) : rw);
   if(failed.length){
     const fs=new Set(failed.map(x=>x.class));
@@ -1207,7 +1210,7 @@ function restoreSession(){
   if(!sv || sv.v!==1 || !sv.ctx || !Array.isArray(sv.rows) || !sv.rows.length) return null;
   if(Date.now()-sv.savedAt>12*3600e3 || sv.ctx.date<istToday()){ clearSession(); return null; }
   state.ctx=sv.ctx; state.pending=sv.pending||[];
-  state.rows=sv.rows.map(r0=> r0.raw && /^[0-9A-Z]{2}$/.test(r0.cls) ? Object.assign(r0,{st:readStatus(r0.raw,r0.cls,r0.date,r0.since)}) : r0);
+  state.rows=sv.rows.map(r0=> r0.raw && /^[0-9A-Z]{2}$/.test(r0.cls) ? Object.assign(r0,{st:readStatus(r0.raw,r0.cls,r0.date,r0.since,r0.emp)}) : r0);
   try{ $("date").value=sv.ctx.date; }catch(e){}
   return sv;
 }
