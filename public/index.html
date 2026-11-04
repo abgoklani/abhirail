@@ -310,6 +310,10 @@ th{background:#111;position:sticky;top:0}
 .gate-p p{margin:0;color:var(--muted);font-size:14px}
 .gate-p input{font-size:18px;padding:12px 14px;border-radius:10px;border:1px solid #333;background:#111;color:inherit;text-align:center;letter-spacing:.06em}
 .gate-err{min-height:18px;color:#ff8a8a;font-size:13px}
+.tw-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.anytime{display:inline-flex;align-items:center;gap:6px;font-size:13px !important;font-weight:600;color:var(--text,#fff) !important;text-transform:none !important;letter-spacing:0 !important;cursor:pointer;user-select:none}
+.anytime input{width:16px;height:16px;margin:0;accent-color:var(--accent,#e50914);cursor:pointer}
+.timepair.off input{opacity:.4}
 .addtrain{margin:14px 0 4px;border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:14px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between}
 .addtrain[hidden]{display:none}
 .addtrain .at-t{display:flex;flex-direction:column;gap:2px;min-width:220px;flex:1}
@@ -376,8 +380,9 @@ body.is-stale .board,body.is-stale .summary{opacity:.45;filter:grayscale(.4)}
       <input id="date" type="date">
     </div>
     <div class="field f-time">
-      <span class="lbl" id="timeLbl">Departs between</span>
-      <div class="timepair" role="group" aria-labelledby="timeLbl">
+      <div class="tw-head"><span class="lbl" id="timeLbl">Departs between</span>
+        <label class="anytime"><input type="checkbox" id="anyTime" checked> Any time</label></div>
+      <div class="timepair" id="timePair" role="group" aria-labelledby="timeLbl">
         <input id="tStart" type="time" value="00:00" aria-label="Earliest departure">
         <span>to</span>
         <input id="tEnd" type="time" value="23:59" aria-label="Latest departure">
@@ -810,6 +815,15 @@ async function resolvePlace(key,inputId){
   const opts=await placeOptions(q);
   if(!opts.length) throw {code:"input",message:"No station matched “"+q+"”. Try the city name or a station code like CNB."};
   state[key]=opts[0]; return state[key];
+}
+/* "Any time" = the whole day (00:00–23:59). Editing a time unticks it; ticking it again remembers the custom window. */
+let customWindow={s:"06:00",e:"22:00"};
+const isWholeDay=()=>$("tStart").value==="00:00"&&$("tEnd").value==="23:59";
+function syncAnyTime(){ const on=isWholeDay(); $("anyTime").checked=on; $("timePair").classList.toggle("off",on); }
+function setAnyTime(on){
+  if(on){ if(!isWholeDay()) customWindow={s:$("tStart").value||"06:00",e:$("tEnd").value||"22:00"}; $("tStart").value="00:00"; $("tEnd").value="23:59"; }
+  else if(isWholeDay()){ $("tStart").value=customWindow.s; $("tEnd").value=customWindow.e; }
+  syncAnyTime();
 }
 function saveForm(){ try{ localStorage.setItem("abhirail-form",JSON.stringify({from:state.from,to:state.to,fromText:$("from").value,toText:$("to").value,cls:$("cls").value,quota:$("quota").value,tStart:$("tStart").value,tEnd:$("tEnd").value})); }catch(e){} }
 function loadForm(){ try{ const f=JSON.parse(localStorage.getItem("abhirail-form")||"null"); if(!f) return; state.from=f.from||null; state.to=f.to||null; if(f.fromText) $("from").value=f.fromText; if(f.toText) $("to").value=f.toText; if(f.cls) $("cls").value=f.cls; if(f.quota) $("quota").value=f.quota; if(f.tStart) $("tStart").value=f.tStart; if(f.tEnd) $("tEnd").value=f.tEnd; }catch(e){} }
@@ -1383,7 +1397,7 @@ function pushRecent(){
 function emptyState(){
   const rec=loadRecent();
   const clsName={AC:"All AC",ANY:"Any class"};
-  const chips=rec.map((r,i)=>'<button type="button" class="chip" data-recent="'+i+'"><b>'+esc(r.fromText)+' → '+esc(r.toText)+'</b><small>'+esc(clsName[r.cls]||r.cls)+' · '+esc(r.tStart)+'–'+esc(r.tEnd)+'</small></button>').join("");
+  const chips=rec.map((r,i)=>'<button type="button" class="chip" data-recent="'+i+'"><b>'+esc(r.fromText)+' → '+esc(r.toText)+'</b><small>'+esc(clsName[r.cls]||r.cls)+' · '+esc(r.tStart==="00:00"&&r.tEnd==="23:59"?"Any time":r.tStart+"–"+r.tEnd)+'</small></button>').join("");
   return '<div class="emptycard"><div class="eh">Pick your route and date, then search.</div><div class="es">AbhiRail checks every train in your time window and shows live seats, fares and the chance a waitlist clears.</div>'+
     (rec.length? '<div class="recent"><span class="tlabel">Recent searches</span><div class="chips">'+chips+'</div></div>' : '')+'</div>';
 }
@@ -1391,7 +1405,7 @@ function useRecent(i){
   const r=loadRecent()[i]; if(!r) return;
   state.from=r.from||null; state.to=r.to||null;
   $("from").value=r.fromText||""; $("to").value=r.toText||"";
-  if(r.cls) $("cls").value=r.cls; if(r.quota) $("quota").value=r.quota; if(r.tStart) $("tStart").value=r.tStart; if(r.tEnd) $("tEnd").value=r.tEnd;
+  if(r.cls) $("cls").value=r.cls; if(r.quota) $("quota").value=r.quota; if(r.tStart) $("tStart").value=r.tStart; if(r.tEnd) $("tEnd").value=r.tEnd; syncAnyTime();
   initDate(); search();
 }
 function hideStale(){ const el=$("stale"); el.hidden=true; el.innerHTML=""; document.body.classList.remove("is-stale"); }
@@ -1436,6 +1450,9 @@ try{ const d=new Date(Date.now()+5.5*3600e3).toISOString().slice(0,10); $("date"
 state.example=false;
 loadForm();
 initDate();
+syncAnyTime();
+$("anyTime").addEventListener("change",()=>{ setAnyTime($("anyTime").checked); saveForm(); });
+["tStart","tEnd"].forEach(id=>$(id).addEventListener("input",()=>{ syncAnyTime(); saveForm(); }));
 const restored=restoreSession();
 render();
 initApi().then(()=>{
