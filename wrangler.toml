@@ -1,0 +1,13 @@
+# Cloudflare Pages settings for AbhiRail. Private keys (IRCTC_DEV_API_KEY, ACCESS_CODE)
+# are NOT here: they are set as Secrets in the Cloudflare dashboard.
+name = "abhirail"
+pages_build_output_dir = "public"
+compatibility_date = "2026-11-01"
+
+[vars]
+SEATS_PER_MINUTE = "60"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "abhirail-db"
+database_id = "6eda20c7-ca77-4421-b62f-6138743adfe0"
