@@ -345,6 +345,40 @@ export async function handle(req, ctx) {
 
     if (route === "collect") return await collect();
 
+    // Instant results: whatever AbhiRail already knows (from earlier searches and the nightly
+    // collector) for many trains at once, read from storage only: no railway call, no credits.
+    if (route === "peek") {
+      const date = q.get("date") || "", quota = (q.get("quota") || "GN").toUpperCase();
+      const items = (q.get("items") || "").split(",").map((x) => x.split(":"))
+        .filter((a) => a.length === 3 && TRAIN.test(a[0]) && CODE.test(a[1]) && CODE.test(a[2])).slice(0, 60);
+      const cls = (q.get("classes") || "1A,2A,3A,3E,CC,EC,SL,2S").split(",").filter((c) => CLASSES.has(c));
+      if (!ISO.test(date) || !items.length) return fail(400, "BAD_REQUEST", "Nothing to look up.");
+      const keys = [];
+      items.forEach(([t, f, o]) => { keys.push("fare/" + [t, f, o, quota].join("-")); cls.forEach((c) => keys.push("av/" + [t, f, o, c, quota].join("-"))); });
+      let rows = {};
+      if (store.getMany) rows = await store.getMany(keys);
+      else await Promise.all(keys.map(async (k) => { try { rows[k] = await store.get(k); } catch {} }));
+      const now = Math.floor(Date.now() / 1000), out = {};
+      items.forEach(([t, f, o]) => {
+        const fr = rows["fare/" + [t, f, o, quota].join("-")];
+        const fd = fr && fr.data && !fr.notFound ? fr.data : null;
+        const seats = [];
+        cls.forEach((c) => {
+          const r = rows["av/" + [t, f, o, c, quota].join("-")];
+          const e = r && r.d && r.d[date];
+          if (!e || now - e[0] > 24 * 3600) return;
+          const x = { class: c, status: e[1], at: e[0] };
+          if (e[2]) x.error = UNAVAILABLE.has(e[2]) ? "UNAVAILABLE" : e[2];
+          const emp = empirical(r.o, e[1], date); if (emp) x.emp = emp;
+          const h = (r.h && r.h[date]) || [];
+          if (e[1] && /WL/i.test(e[1]) && h.length && now - h[0][0] >= 6 * 3600) x.since = h[0];
+          seats.push(x);
+        });
+        if (seats.length) out[t] = { fares: fd ? fd.fares : {}, classes: fd ? fd.classes : [], seats, at: Math.min(...seats.map((x) => x.at)) };
+      });
+      return json({ ok: true, data: out });
+    }
+
     if (route === "schedule") {
       const train = q.get("train") || "";
       if (!TRAIN.test(train)) return fail(400, "BAD_REQUEST", "Enter a 5-digit train number.");

@@ -960,8 +960,13 @@ async function search(){
     else{
       trains.forEach(t=>{ state.rows.push(...rowsFromBoard(t,null,null,null)); });
       render();
-      state.pending=trains.slice(40);
-      checkSeats(trains.slice(0,40));
+      // Instant: show what AbhiRail already knows, then check live only what is missing or out of date
+      const known=state.ctx.fresh? {} : await peekAll(trains);
+      const fresh=new Set(Object.keys(known).filter(no=>known[no].complete && Date.now()-known[no].at*1000<staleMs(date)));
+      const todo=trains.filter(t=>!fresh.has(t.no)).sort((a,b)=>(known[a.no]?1:0)-(known[b.no]?1:0));
+      if(fresh.size) state.ctx.checkedAt=Math.max(state.ctx.checkedAt||0,...[...fresh].map(no=>known[no].at*1000));
+      state.pending=todo.slice(40);
+      checkSeats(todo.slice(0,40));
     }
   }catch(err){
     progress(false);
@@ -1146,6 +1151,32 @@ async function addTrainByNumber(no){
     if(state.queueBusy){ state.queue.unshift(t); state.queueObjs.set(t.no,t); render(); } else checkSeats([t]);
   }catch(err){ const c=errCopy(err); notice("bad",c.title,c.text); }
   finally{ btn.disabled=false; btn.textContent="Add & check"; }
+}
+
+/* ---------- instant results from storage ---------- */
+async function peekAll(trains){
+  const want=classFilter(), known={};
+  for(let i=0;i<trains.length;i+=40){
+    const chunk=trains.slice(i,i+40);
+    try{
+      const r=await api("peek",{date:state.ctx.date,quota:state.ctx.quota,classes:(want||["1A","2A","3A","3E","CC","EC","SL","2S"]).join(","),items:chunk.map(t=>t.no+":"+t.fromCode+":"+t.toCode).join(",")});
+      Object.entries(r.data||{}).forEach(([no,pk])=>{ const t=chunk.find(x=>x.no===no); if(t && applyPeek(t,pk,want)) known[no]=pk; });
+    }catch(e){ break; }
+  }
+  if(Object.keys(known).length) render();
+  return known;
+}
+function applyPeek(t,pk,want){
+  const tt=Object.assign({},t,{fares:Object.assign({},t.fares||{},pk.fares||{}),classes:(pk.classes&&pk.classes.length)?pk.classes:t.classes});
+  const ok=pk.seats.filter(x=>x.status);
+  const carried=(tt.classes||[]).filter(c=>!want||want.includes(c));
+  pk.complete = carried.length>0 && carried.every(c=>pk.seats.some(x=>x.class===c));
+  if(!ok.length){
+    if(pk.complete){ setRows(t.no,rowsFromBoard(Object.assign({},t.probe?t:tt,{noLive:true}),null,null,null)); return true; }
+    return false;
+  }
+  setRows(t.no,rowsFromBoard(tt,ok.map(x=>({classCode:x.class,status:x.status,since:x.since||null,emp:x.emp||null,fare:tt.fares[x.class]??null})),pk.at*1000,null));
+  return true;
 }
 
 /* ---------- booking sheet ---------- */

@@ -21,6 +21,16 @@ function makeStore(db) {
         return r ? JSON.parse(r.v) : null;
       } catch { return null; }
     },
+    async getMany(keys) {
+      const out = {};
+      if (!db) { keys.forEach((k) => { const v = memory.get(k); if (v != null) out[k] = JSON.parse(v); }); return out; }
+      try {
+        await prepare();
+        const r = await db.prepare("SELECT k, v FROM kv WHERE k IN (SELECT value FROM json_each(?))").bind(JSON.stringify(keys)).all();
+        (r.results || []).forEach((row) => { try { out[row.k] = JSON.parse(row.v); } catch {} });
+      } catch {}
+      return out;
+    },
     async list(prefix) {
       if (!db) return [...memory.keys()].filter((k) => k.startsWith(prefix));
       try {
