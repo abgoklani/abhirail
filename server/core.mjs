@@ -350,9 +350,10 @@ export async function handle(req, ctx) {
       const train = q.get("train") || "", from = (q.get("from") || "").toUpperCase(), to = (q.get("to") || "").toUpperCase(), date = q.get("date") || "";
       if (!TRAIN.test(train) || !CODE.test(from) || !CODE.test(to) || !ISO.test(date)) return fail(400, "BAD_REQUEST", "bad");
       const out = {};
-      for (const [name, params] of [["class=all", { from, to, date: toDMY(date), class: "all", quota: "GN" }], ["no class", { from, to, date: toDMY(date), quota: "GN" }], ["class=3A,2A", { from, to, date: toDMY(date), class: "3A,2A", quota: "GN" }]]) {
-        try { const b = await upstream("/api/v1/trains/" + train + "/availability", params, Date.now() + 15000, true); out[name] = { keys: Object.keys(b), body: JSON.stringify(b).slice(0, 1200) }; }
-        catch (e) { out[name] = { error: e.code, status: e.status, message: e.message }; }
+      for (const cls of ["3A", "2A", "1A"]) {
+        try { const b = await upstream("/api/v1/trains/" + train + "/availability", { from, to, date: toDMY(date), class: cls, quota: "GN" }, Date.now() + 15000, true);
+          out[cls] = { source: b.source, syncedAt: b.syncedAt, _time: b._time, now: new Date().toISOString(), first: (b.availability || [])[0], bookingConfig: b.bookingConfig }; }
+        catch (e) { out[cls] = { error: e.code, message: e.message }; }
       }
       return json({ ok: true, out });
     }
