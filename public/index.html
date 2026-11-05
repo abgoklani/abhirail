@@ -790,9 +790,15 @@ function cityMatches(q){
 function stationPlace(st){ return {kind:"station",name:st.name+" ("+st.code+")",label:st.name,codes:[st.code],sub:st.code+(st.state?" · "+st.state:"")}; }
 async function placeOptions(q){
   const out=cityMatches(q);
-  const up=q.trim().toUpperCase();
-  if(/^[A-Z]{2,5}$/.test(up) && !out.length){ out.push({kind:"station",name:up,label:up,codes:[up],sub:"Station code"}); }
-  try{ const r=await api("stations",{q}); (r.data||[]).slice(0,7).forEach(st=>{ if(st && st.code && !out.some(o=>o.codes.length===1&&o.codes[0]===st.code)) out.push(stationPlace(st)); }); }catch(e){}
+  const up=q.trim().toUpperCase(), ql=q.trim().toLowerCase();
+  let found=[];
+  try{ const r=await api("stations",{q}); found=(r.data||[]).filter(st=>st&&st.code).slice(0,7).map(stationPlace); }catch(e){}
+  // A station whose name matches what was typed goes first (typing "Alwar" means Alwar, AWR)
+  const nm=o=>(o.label||o.name||"").toLowerCase();
+  found.sort((a,b)=>(nm(b)===ql)-(nm(a)===ql) || (b.codes[0]===up)-(a.codes[0]===up));
+  found.forEach(pl=>{ if(!out.some(o=>o.codes.length===1&&o.codes[0]===pl.codes[0])) out.push(pl); });
+  // Only treat the text as a raw station code when nothing real matched it
+  if(/^[A-Z]{2,5}$/.test(up) && !out.length) out.push({kind:"station",name:up,label:up,codes:[up],sub:"Station code",guess:true});
   return out.slice(0,8);
 }
 function setupPlace(inputId,suggId,key){
@@ -808,13 +814,19 @@ function setupPlace(inputId,suggId,key){
   function pick(pl){ state[key]=pl; inp.value=pl.kind==="city"?pl.name:pl.name; box.hidden=true; saveForm(); }
 }
 async function resolvePlace(key,inputId){
-  if(state[key]) return state[key];
+  if(state[key] && !(state[key].guess || state[key].sub==="Station code")) return state[key];
+  state[key]=null;
   const q=$(inputId).value.trim(); if(!q) throw {code:"input",message:"Enter a "+(key==="from"?"starting":"destination")+" city or station."};
   const city=CITIES.find(c=>c.name.toLowerCase()===q.toLowerCase());
   if(city){ state[key]={kind:"city",name:city.name,codes:city.codes.slice()}; return state[key]; }
   const opts=await placeOptions(q);
   if(!opts.length) throw {code:"input",message:"No station matched “"+q+"”. Try the city name or a station code like CNB."};
-  state[key]=opts[0]; return state[key];
+  const ql=q.toLowerCase(), up=q.toUpperCase();
+  state[key]=opts.find(o=>o.kind==="city"&&o.name.toLowerCase()===ql)
+    || opts.find(o=>!o.guess&&(o.label||o.name||"").toLowerCase()===ql)
+    || opts.find(o=>!o.guess&&o.codes[0]===up)
+    || opts.find(o=>!o.guess) || opts[0];
+  return state[key];
 }
 /* "Any time" = the whole day (00:00–23:59). Editing a time unticks it; ticking it again remembers the custom window. */
 let customWindow={s:"06:00",e:"22:00"};
