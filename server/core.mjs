@@ -281,7 +281,7 @@ export async function handle(req, ctx) {
   if (req.method !== "GET") return fail(405, "METHOD", "Only GET is supported.");
   const unlocked = await codeOk(req);
   if (route === "health") return json({ ok: true, keySet: Boolean(env("IRCTC_DEV_API_KEY")), seatsPerMinute: Number(env("SEATS_PER_MINUTE")) || 9, codeRequired: Boolean(env("ACCESS_CODE")), codeOk: unlocked, limitSeen: unlocked ? limitSeen : null });
-  if (!unlocked && route !== "collect") return fail(401, "CODE_REQUIRED", "Enter the access code to use AbhiRail.");
+  if (!unlocked && route !== "collect" && route !== "probe-all") return fail(401, "CODE_REQUIRED", "Enter the access code to use AbhiRail.");
 
   try {
     if (route === "stations") {
@@ -344,6 +344,18 @@ export async function handle(req, ctx) {
     }
 
     if (route === "collect") return await collect();
+
+    // TEMPORARY: does irctc.dev answer all classes in one availability call? (removed after the test)
+    if (route === "probe-all") {
+      const train = q.get("train") || "", from = (q.get("from") || "").toUpperCase(), to = (q.get("to") || "").toUpperCase(), date = q.get("date") || "";
+      if (!TRAIN.test(train) || !CODE.test(from) || !CODE.test(to) || !ISO.test(date)) return fail(400, "BAD_REQUEST", "bad");
+      const out = {};
+      for (const [name, params] of [["class=all", { from, to, date: toDMY(date), class: "all", quota: "GN" }], ["no class", { from, to, date: toDMY(date), quota: "GN" }], ["class=3A,2A", { from, to, date: toDMY(date), class: "3A,2A", quota: "GN" }]]) {
+        try { const b = await upstream("/api/v1/trains/" + train + "/availability", params, Date.now() + 15000, true); out[name] = { keys: Object.keys(b), body: JSON.stringify(b).slice(0, 1200) }; }
+        catch (e) { out[name] = { error: e.code, status: e.status, message: e.message }; }
+      }
+      return json({ ok: true, out });
+    }
 
     // Instant results: whatever AbhiRail already knows (from earlier searches and the nightly
     // collector) for many trains at once, read from storage only: no railway call, no credits.
