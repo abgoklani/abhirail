@@ -962,7 +962,7 @@ async function search(){
       render();
       // Instant: show what AbhiRail already knows, then check live only what is missing or out of date
       const known=state.ctx.fresh? {} : await peekAll(trains);
-      const fresh=new Set(Object.keys(known).filter(no=>known[no].complete && Date.now()-known[no].at*1000<staleMs(date)));
+      const fresh=new Set(Object.keys(known).filter(no=>known[no].complete && Date.now()-known[no].at*1000<(daysLeft(date)<=1?3:5)*60e3));
       const todo=trains.filter(t=>!fresh.has(t.no)).sort((a,b)=>(known[a.no]?1:0)-(known[b.no]?1:0));
       if(fresh.size) state.ctx.checkedAt=Math.max(state.ctx.checkedAt||0,...[...fresh].map(no=>known[no].at*1000));
       state.pending=todo.slice(40);
@@ -984,7 +984,10 @@ function classesToCheck(t){
   return cl.filter(c=>["1A","2A","3A","3E","CC","EC","SL","2S"].includes(c));
 }
 async function checkOne(t,want){
-  const r=await api("seats",Object.assign({train:t.no,from:t.fromCode,to:t.toCode,date:t.date,quota:state.ctx.quota,classes:want?want.join(","):""},state.ctx.fresh?{fresh:1}:{}));
+  // First pass: only each train's main class (3A, or CC on chair-car trains); later passes: the rest
+  const ask=(t.retryCls&&t.retryCls.length)? t.retryCls : (t.only&&t.only.length? t.only : want);
+  const firstPass=!(t.retryCls&&t.retryCls.length) && !(t.only&&t.only.length) && (!want || want.length>1);
+  const r=await api("seats",Object.assign({train:t.no,from:t.fromCode,to:t.toCode,date:t.date,quota:state.ctx.quota,classes:ask?ask.join(","):""},firstPass?{limit:1}:{},state.ctx.fresh?{fresh:1}:{}));
   const d=r.data||{}; const at=r.cachedAt? r.cachedAt*1000 : null;
   const fares=Object.assign({},t.fares||{},d.fares||{});
   const seats=d.seats||[];
@@ -993,8 +996,10 @@ async function checkOne(t,want){
   const limited=seats.filter(x=>x.error==="RATE_LIMIT_EXCEEDED"||x.error==="LIMIT");
   const failed=seats.filter(x=>x.error && !isNA(x));
   const na=new Set(seats.filter(isNA).map(x=>x.class));
-  const out={limited:limited.length,failed:failed.length-limited.length,retryCls:failed.map(x=>x.class),retryAfter:d.retryAfter||null};
-  if(!seats.some(x=>x.status) && !failed.length && (t.probe || seats.length)){ setRows(t.no,rowsFromBoard(Object.assign({},(t.probe||!d.known)?t:tt,{noLive:true}),null,null,null)); return out; }
+  const rest=(d.rest||[]).filter(c=>!want||want.includes(c));
+  const out={limited:limited.length,failed:failed.length-limited.length,retryCls:failed.map(x=>x.class),retryAfter:d.retryAfter||null,rest,
+    mainMissing: seats.length>0 && seats.every(x=>!x.status && isNA(x))};
+  if(!seats.some(x=>x.status) && !failed.length && !rest.length && !(t.only&&t.only.length) && (t.probe || seats.length)){ setRows(t.no,rowsFromBoard(Object.assign({},(t.probe||!d.known)?t:tt,{noLive:true}),null,null,null)); return out; }
   if(!seats.length){ setRows(t.no, d.known? [] : rowsFromBoard(tt,null,at,null)); return out; }
   const prev=new Map(state.rows.filter(r0=>r0.no===t.no && r0.st && r0.st.pct!=null).map(r0=>[r0.cls,r0]));
   let rows=rowsFromBoard(tt,seats.map(x=>({classCode:x.class,status:x.status,since:x.since||null,emp:x.emp||null,fare:x.fare??fares[x.class]??null})),at,null);
@@ -1004,7 +1009,11 @@ async function checkOne(t,want){
     rows=rows.map(rw=>{ if(!fs.has(rw.cls)) return rw; const keep=prev.get(rw.cls); if(keep) return keep;
       return Object.assign(rw,{st:{kind:"na",pct:null,label:"In queue"},checkedAt:null}); });
   }
-  setRows(t.no,rows);
+  // Keep this train's other classes (from an earlier pass) and show the ones still to come as "In queue"
+  const returned=new Set(seats.map(x=>x.class));
+  const others=state.rows.filter(r0=>r0.no===t.no && /^[0-9A-Z]{2}$/.test(r0.cls) && !returned.has(r0.cls) && r0.st && (r0.st.pct!=null || r0.raw || r0.st.label==="Check on IRCTC"));
+  const pending=rest.filter(c=>!returned.has(c) && !others.some(r0=>r0.cls===c)).map(c=>Object.assign({},tt,{cls:c,raw:null,st:{kind:"na",pct:null,label:"In queue"},fare:fares[c]??null,checkedAt:null}));
+  setRows(t.no,rows.concat(others,pending));
   if(at) state.ctx.checkedAt=Math.max(state.ctx.checkedAt||0,at);
   return out;
 }
@@ -1019,6 +1028,8 @@ function setRate(v){ state.rateNow=Math.max(minRate(),Math.min(maxRate(),v)); tr
 function loadRate(){ try{ const o=JSON.parse(localStorage.getItem("abhirail-rate")||"null"); if(o && o.max===maxRate() && Date.now()-o.at<6*3600e3) state.rateNow=o.v; }catch(e){} }
 function costOf(t){
   if(t.retryCls && t.retryCls.length) return t.retryCls.length;
+  if(t.only && t.only.length) return t.only.length;
+  const w=classFilter(); if(!w || w.length>1) return 1;
   const known=state.rows.filter(r0=>r0.no===t.no && /^[0-9A-Z]{2}$/.test(r0.cls)).map(r0=>r0.cls);
   return (known.length? known : classesToCheck(t)).length || 1;
 }
@@ -1047,8 +1058,8 @@ async function checkSeats(trains){
   state.queue=trains.map(t=>Object.assign({},t,{retryCls:null})); state.queueActive=new Set(); state.queueHeld=new Set(); state.queueTries={}; state.queueBusy=true;
   state.queueObjs=new Map(state.queue.map(t=>[t.no,t]));
   if(!state.rateNow) loadRate();
-  const total=trains.length; let done=0; let blocking=null;
-  const label=()=>"Checked "+done+" of "+total+" trains";
+  let total=trains.length; let done=0; let blocking=null;
+  const label=()=>"Live checks: "+done+" of "+total+" done";
   render();
   const requeue=(t,limit,front)=>{ const n=(state.queueTries[t.no]=(state.queueTries[t.no]||0)+1); if(n<=limit){ front? state.queue.unshift(t) : state.queue.push(t); return true; } return false; };
   const worker=async()=>{
@@ -1073,6 +1084,8 @@ async function checkSeats(trains){
           if(!requeue(t,FAIL_TRIES,false)){ done++; markRetry(t.no); }
         } else {
           done++; pace.ok+=costOf(Object.assign({},t,{retryCls:null}));
+          if(res.rest && res.rest.length && !(t.only&&t.only.length)){ const t2=Object.assign({},t,{only:res.rest,retryCls:null});
+            if(res.mainMissing) state.queue.unshift(t2); else state.queue.push(t2); total++; }  // no data in the main class: try the others next
           if(pace.ok>=9 && rate()<maxRate()){ setRate(rate()+1); pace.ok=0; }
         }
       }catch(err){

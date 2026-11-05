@@ -1,7 +1,0 @@
-name: Probe all-class availability (temporary)
-on: workflow_dispatch
-jobs:
-  probe:
-    runs-on: ubuntu-latest
-    steps:
-      - run: curl -s --max-time 60 "https://rail.abhi.network/api/probe-all?train=12393&from=CNB&to=NDLS&date=2026-11-16"

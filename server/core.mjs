@@ -42,7 +42,7 @@ class Upstream extends Error {
 function availTtl(iso) {
   const ist = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
   const days = Math.round((Date.parse(iso) - Date.parse(ist)) / 864e5);
-  return days <= 1 ? 5 * 60 : days <= 3 ? 10 * 60 : days <= 10 ? 20 * 60 : 30 * 60;
+  return days <= 1 ? 3 * 60 : 5 * 60;
 }
 
 async function cached(kind, key, loader, opts = {}) {
@@ -281,7 +281,7 @@ export async function handle(req, ctx) {
   if (req.method !== "GET") return fail(405, "METHOD", "Only GET is supported.");
   const unlocked = await codeOk(req);
   if (route === "health") return json({ ok: true, keySet: Boolean(env("IRCTC_DEV_API_KEY")), seatsPerMinute: Number(env("SEATS_PER_MINUTE")) || 9, codeRequired: Boolean(env("ACCESS_CODE")), codeOk: unlocked, limitSeen: unlocked ? limitSeen : null });
-  if (!unlocked && route !== "collect" && route !== "probe-all") return fail(401, "CODE_REQUIRED", "Enter the access code to use AbhiRail.");
+  if (!unlocked && route !== "collect") return fail(401, "CODE_REQUIRED", "Enter the access code to use AbhiRail.");
 
   try {
     if (route === "stations") {
@@ -317,6 +317,12 @@ export async function handle(req, ctx) {
       }
       let cls = carried.length ? carried : (wanted.length ? wanted.filter((c) => ["1A", "2A", "3A", "CC", "SL"].includes(c)) : ["SL", "3A", "2A", "1A"]);
       if (wanted.length) cls = cls.filter((c) => wanted.includes(c));
+      // Most-booked class first; with limit=N only the first N are checked now and the rest are listed for later
+      const PREF = ["3A", "CC", "2A", "3E", "SL", "1A", "EC", "2S"];
+      cls.sort((a, b) => (PREF.indexOf(a) + 99) % 99 - (PREF.indexOf(b) + 99) % 99);
+      const all = cls.slice(), limit = Number(q.get("limit")) || 0;
+      const rest = limit > 0 ? cls.slice(limit) : [];
+      if (limit > 0) cls = cls.slice(0, limit);
       const seats = new Array(cls.length);
       let next = 0, retryAfter = 0;
       const worker = async () => {
@@ -340,23 +346,11 @@ export async function handle(req, ctx) {
         }
       };
       await Promise.all([worker(), worker(), worker()]);
-      return json({ ok: true, data: { fares, classes: cls, seats, known: carried.length > 0, retryAfter: retryAfter || null }, cachedAt: at || null });
+      return json({ ok: true, data: { fares, classes: all, seats, rest, known: carried.length > 0, retryAfter: retryAfter || null }, cachedAt: at || null });
     }
 
     if (route === "collect") return await collect();
 
-    // TEMPORARY: does irctc.dev answer all classes in one availability call? (removed after the test)
-    if (route === "probe-all") {
-      const train = q.get("train") || "", from = (q.get("from") || "").toUpperCase(), to = (q.get("to") || "").toUpperCase(), date = q.get("date") || "";
-      if (!TRAIN.test(train) || !CODE.test(from) || !CODE.test(to) || !ISO.test(date)) return fail(400, "BAD_REQUEST", "bad");
-      const out = {};
-      for (const cls of ["3A", "2A", "1A"]) {
-        try { const b = await upstream("/api/v1/trains/" + train + "/availability", { from, to, date: toDMY(date), class: cls, quota: "GN" }, Date.now() + 15000, true);
-          out[cls] = { source: b.source, syncedAt: b.syncedAt, _time: b._time, now: new Date().toISOString(), first: (b.availability || [])[0], bookingConfig: b.bookingConfig }; }
-        catch (e) { out[cls] = { error: e.code, message: e.message }; }
-      }
-      return json({ ok: true, out });
-    }
 
     // Instant results: whatever AbhiRail already knows (from earlier searches and the nightly
     // collector) for many trains at once, read from storage only: no railway call, no credits.
